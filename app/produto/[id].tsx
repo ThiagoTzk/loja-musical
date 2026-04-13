@@ -1,5 +1,6 @@
 import { CarrinhoContext } from "@/src/context/CarrinhoContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
+import { produtos } from "@/src/data/produto";
 import { router, useLocalSearchParams } from "expo-router";
 import { useContext } from "react";
 import {
@@ -7,49 +8,16 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Produto() {
-
   const { id } = useLocalSearchParams();
   const { colors } = useContext(ThemeContext);
   const { adicionarProduto } = useContext(CarrinhoContext);
 
-  let produto: any = null;
-
-  if (id === "1") {
-    produto = {
-      nome: "Produto 1",
-      preco: "R$ 499,90",
-      imagem: require("../../assets/images/produto1.webp"),
-    };
-  }
-
-  if (id === "2") {
-    produto = {
-      nome: "Produto 2",
-      preco: "R$ 299,90",
-      imagem: require("../../assets/images/produto2.webp"),
-    };
-  }
-
-  if (id === "3") {
-    produto = {
-      nome: "Produto 3",
-      preco: "R$ 799,90",
-      imagem: require("../../assets/images/produto3.webp"),
-    };
-  }
-
-  if (id === "4") {
-    produto = {
-      nome: "Produto 4",
-      preco: "R$ 999,90",
-      imagem: require("../../assets/images/produto4.webp"),
-    };
-  }
+  const produto = produtos.find((p) => p.id === id);
 
   if (!produto) {
     return (
@@ -60,13 +28,16 @@ export default function Produto() {
   }
 
   function adicionarCarrinho() {
+  if (!produto) return;
+
   adicionarProduto(produto);
   router.push("/(tabs)/carrinho");
 }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <Pressable onPress={() => router.back()} style={styles.backButton}>
         <Text style={{ color: colors.accent }}>Voltar</Text>
       </Pressable>
@@ -74,7 +45,6 @@ export default function Produto() {
       <Image source={produto.imagem} style={styles.image} />
 
       <View style={styles.infoContainer}>
-
         <Text style={[styles.nome, { color: colors.text }]}>
           {produto.nome}
         </Text>
@@ -95,15 +65,12 @@ export default function Produto() {
             Adicionar ao carrinho
           </Text>
         </Pressable>
-
       </View>
-
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     padding: 20,
@@ -145,5 +112,4 @@ const styles = StyleSheet.create({
   textoBotao: {
     fontWeight: "bold",
   },
-
 });

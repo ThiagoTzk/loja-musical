@@ -1,11 +1,12 @@
 import { ThemeContext } from "@/src/context/ThemeContext";
+import { Produto, produtos } from "@/src/data/produto";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useContext } from "react";
 import {
+  FlatList,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -14,9 +15,32 @@ import {
 export default function Home() {
   const { colors, theme, toggleTheme } = useContext(ThemeContext);
 
+  function renderItem({ item }: { item: Produto }) {
+    return (
+      <Pressable
+        style={[styles.card, { backgroundColor: colors.card }]}
+        onPress={() => router.push(`/produto/${item.id}`)}
+      >
+        <Image source={item.imagem} style={styles.image} />
+
+        <Text style={[styles.productName, { color: colors.text }]}>
+          {item.nome}
+        </Text>
+
+        <Text style={[styles.price, { color: colors.text }]}>
+          {item.preco}
+        </Text>
+
+        <Text style={[styles.installment, { color: colors.secondaryText }]}>
+          10x sem juros no cartão
+        </Text>
+      </Pressable>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-
+      
       <View style={styles.header}>
         <Text style={[styles.logo, { color: colors.accent }]}>
           BlackTone Music
@@ -31,85 +55,15 @@ export default function Home() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.productsContainer}>
+      <FlatList
+        data={produtos}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        contentContainerStyle={styles.productsContainer}
+        showsVerticalScrollIndicator={false}
+      />
 
-        <Pressable
-          style={[styles.card, { backgroundColor: colors.card }]}
-          onPress={() => router.push("/produto/1")}
-        >
-          <Image
-            source={require("../../assets/images/produto1.webp")}
-            style={styles.image}
-          />
-          <Text style={[styles.productName, { color: colors.text }]}>
-            Guitarra
-          </Text>
-          <Text style={[styles.price, { color: colors.text }]}>
-            R$ 999,90
-          </Text>
-          <Text style={[styles.installment, { color: colors.secondaryText }]}>
-            10x sem juros no cartão
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.card, { backgroundColor: colors.card }]}
-          onPress={() => router.push("/produto/2")}
-        >
-          <Image
-            source={require("../../assets/images/produto2.webp")}
-            style={styles.image}
-          />
-          <Text style={[styles.productName, { color: colors.text }]}>
-            Produto 1
-          </Text>
-          <Text style={[styles.price, { color: colors.text }]}>
-            R$ 499,90
-          </Text>
-          <Text style={[styles.installment, { color: colors.secondaryText }]}>
-            10x sem juros no cartão
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.card, { backgroundColor: colors.card }]}
-          onPress={() => router.push("/produto/3")}
-        >
-          <Image
-            source={require("../../assets/images/produto3.webp")}
-            style={styles.image}
-          />
-          <Text style={[styles.productName, { color: colors.text }]}>
-            Produto 2
-          </Text>
-          <Text style={[styles.price, { color: colors.text }]}>
-            R$ 299,90
-          </Text>
-          <Text style={[styles.installment, { color: colors.secondaryText }]}>
-            10x sem juros no cartão
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.card, { backgroundColor: colors.card }]}
-          onPress={() => router.push("/produto/4")}
-        >
-          <Image
-            source={require("../../assets/images/produto4.webp")}
-            style={styles.image}
-          />
-          <Text style={[styles.productName, { color: colors.text }]}>
-            Produto 3
-          </Text>
-          <Text style={[styles.price, { color: colors.text }]}>
-            R$ 799,90
-          </Text>
-          <Text style={[styles.installment, { color: colors.secondaryText }]}>
-            10x sem juros no cartão
-          </Text>
-        </Pressable>
-
-      </ScrollView>
     </View>
   );
 }
@@ -137,17 +91,15 @@ const styles = StyleSheet.create({
   },
 
   productsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-around",
     paddingBottom: 20,
+    paddingHorizontal: 10,
   },
 
   card: {
-    width: "45%",
+    flex: 1,
+    margin: 5,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 20,
   },
 
   image: {

@@ -15,158 +15,147 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Carrinho(){
 
-const {colors}=useContext(ThemeContext);
+  const { colors } = useContext(ThemeContext);
+  const { carrinho, removerProduto } = useContext(CarrinhoContext);
+  const { usuario } = useContext(UsuarioContext);
 
-const {carrinho,removerProduto,limparCarrinho}=useContext(CarrinhoContext);
+  function finalizarCompra(){
+    if(!usuario){
+      router.push("/login");
+      return;
+    }
 
-const {usuario,adicionarHistorico}=useContext(UsuarioContext);
+    router.push("/pagamento");
+  }
 
-function finalizarCompra(){
+  const total = carrinho.reduce((acc, item) => {
+    const preco = parseFloat(item.preco.replace("R$", "").replace(",", "."));
+    return acc + preco;
+  }, 0);
 
-if(!usuario){
-router.push("/login");
-return;
+  return(
+
+    <SafeAreaView style={[styles.container,{backgroundColor:colors.background}]}>
+
+      <Text style={[styles.titulo,{color:colors.text}]}>
+        Carrinho
+      </Text>
+
+      <ScrollView>
+
+        {carrinho.length === 0 && (
+          <Text style={{color:colors.text}}>
+            Carrinho vazio
+          </Text>
+        )}
+
+        {carrinho.map((item,index)=>(
+
+          <View key={index} style={styles.produto}>
+
+            <Image
+              source={item.imagem}
+              style={styles.imagem}
+            />
+
+            <View style={styles.infoProduto}>
+
+              <Text style={{color:colors.text}}>
+                {item.nome}
+              </Text>
+
+              <Text style={{color:colors.text}}>
+                {item.preco}
+              </Text>
+
+            </View>
+
+            <Pressable onPress={()=>removerProduto(index)}>
+              <Text style={{color:"red"}}>
+                Remover
+              </Text>
+            </Pressable>
+
+          </View>
+
+        ))}
+
+      </ScrollView>
+
+      {carrinho.length > 0 && (
+
+        <>
+          <View style={styles.totalContainer}>
+            <Text style={[styles.total,{color:colors.text}]}>
+              Total: R$ {total.toFixed(2)}
+            </Text>
+          </View>
+
+          <Pressable
+            style={[styles.botao,{backgroundColor:colors.accent}]}
+            onPress={finalizarCompra}
+          >
+            <Text style={styles.textoBotao}>
+              Finalizar compra
+            </Text>
+          </Pressable>
+        </>
+
+      )}
+
+    </SafeAreaView>
+
+  );
 }
 
-adicionarHistorico(carrinho);
+const styles = StyleSheet.create({
 
-limparCarrinho();
+  container:{
+    flex:1,
+    padding:20
+  },
 
-router.push("/perfil");
-}
+  titulo:{
+    fontSize:26,
+    fontWeight:"bold",
+    marginBottom:20
+  },
 
-const total=carrinho.reduce((acc,item)=>{
-const preco=parseFloat(item.preco.replace("R$","").replace(",","."));
-return acc+preco;
-},0);
+  produto:{
+    flexDirection:"row",
+    alignItems:"center",
+    marginBottom:20
+  },
 
-return(
+  imagem:{
+    width:60,
+    height:60,
+    resizeMode:"contain",
+    marginRight:10
+  },
 
-<SafeAreaView style={[styles.container,{backgroundColor:colors.background}]}>
+  infoProduto:{
+    flex:1
+  },
 
-<Text style={[styles.titulo,{color:colors.text}]}>
-Carrinho
-</Text>
+  totalContainer:{
+    marginTop:20,
+    marginBottom:10
+  },
 
-<ScrollView>
+  total:{
+    fontSize:20,
+    fontWeight:"bold"
+  },
 
-{carrinho.length===0 && (
-<Text style={{color:colors.text}}>
-Carrinho vazio
-</Text>
-)}
+  botao:{
+    padding:18,
+    borderRadius:10,
+    alignItems:"center"
+  },
 
-{carrinho.map((item,index)=>(
-
-<View key={index} style={styles.produto}>
-
-<Image
-source={item.imagem}
-style={styles.imagem}
-/>
-
-<View style={styles.infoProduto}>
-
-<Text style={{color:colors.text}}>
-{item.nome}
-</Text>
-
-<Text style={{color:colors.text}}>
-{item.preco}
-</Text>
-
-</View>
-
-<Pressable onPress={()=>removerProduto(index)}>
-<Text style={{color:"red"}}>
-Remover
-</Text>
-</Pressable>
-
-</View>
-
-))}
-
-</ScrollView>
-
-{carrinho.length>0 && (
-
-<>
-
-<View style={styles.totalContainer}>
-<Text style={[styles.total,{color:colors.text}]}>
-Total: R$ {total.toFixed(2)}
-</Text>
-</View>
-
-<Pressable
-style={[styles.botao,{backgroundColor:colors.accent}]}
-onPress={finalizarCompra}
->
-
-<Text style={styles.textoBotao}>
-Finalizar compra
-</Text>
-
-</Pressable>
-
-</>
-
-)}
-
-</SafeAreaView>
-
-);
-}
-
-const styles=StyleSheet.create({
-
-container:{
-flex:1,
-padding:20
-},
-
-titulo:{
-fontSize:26,
-fontWeight:"bold",
-marginBottom:20
-},
-
-produto:{
-flexDirection:"row",
-alignItems:"center",
-marginBottom:20
-},
-
-imagem:{
-width:60,
-height:60,
-resizeMode:"contain",
-marginRight:10
-},
-
-infoProduto:{
-flex:1
-},
-
-totalContainer:{
-marginTop:20,
-marginBottom:10
-},
-
-total:{
-fontSize:20,
-fontWeight:"bold"
-},
-
-botao:{
-padding:18,
-borderRadius:10,
-alignItems:"center"
-},
-
-textoBotao:{
-fontWeight:"bold"
-}
+  textoBotao:{
+    fontWeight:"bold"
+  }
 
 });
