@@ -37,7 +37,6 @@ export default function Pagamento() {
   const [erro, setErro] = useState("");
   const [mostrarPopup, setMostrarPopup] = useState(false);
 
-  // ================= FORMATAÇÕES =================
 
   function formatarCPF(valor: string) {
     let v = valor.replace(/\D/g, "").slice(0, 11);
@@ -65,8 +64,6 @@ export default function Pagamento() {
 
     return v;
   }
-
-  // ================= LÓGICA =================
 
   function calcularTotal() {
     return carrinho.reduce((acc, item) => {
@@ -115,7 +112,7 @@ export default function Pagamento() {
 
   const total = calcularTotal();
 
-  // ================= UI =================
+ 
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
