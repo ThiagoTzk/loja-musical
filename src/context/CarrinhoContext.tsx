@@ -1,10 +1,5 @@
+import { Produto } from "@/src/data/produto";
 import { createContext, ReactNode, useState } from "react";
-
-export type Produto = {
-  nome: string;
-  preco: string;
-  imagem: any;
-};
 
 type CarrinhoContextType = {
   carrinho: Produto[];
@@ -18,11 +13,10 @@ export const CarrinhoContext = createContext<CarrinhoContextType>(
 );
 
 export function CarrinhoProvider({ children }: { children: ReactNode }) {
-
   const [carrinho, setCarrinho] = useState<Produto[]>([]);
 
   function adicionarProduto(produto: Produto) {
-    setCarrinho([...carrinho, produto]);
+    setCarrinho((atual) => [...atual, produto]);
   }
 
   function removerProduto(index: number) {
@@ -40,7 +34,7 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
         carrinho,
         adicionarProduto,
         removerProduto,
-        limparCarrinho
+        limparCarrinho,
       }}
     >
       {children}
