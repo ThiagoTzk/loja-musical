@@ -3,6 +3,11 @@ export function precoParaNumero(preco: string) {
   return Number(valor.trim()) || 0;
 }
 
+const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
+  currency: "BRL",
+  style: "currency",
+});
+
 export function formatarMoeda(valor: number) {
-  return `R$ ${valor.toFixed(2).replace(".", ",")}`;
+  return formatadorMoeda.format(valor);
 }

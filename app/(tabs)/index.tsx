@@ -1,4 +1,7 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { FocusablePressable } from "@/components/focusable-pressable";
+import { LanguageToggle } from "@/components/language-toggle";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ProdutosContext } from "@/src/context/ProdutosContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { Produto } from "@/src/data/produto";
@@ -15,11 +18,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Home() {
+  const { language, t } = useContext(LanguageContext);
   const { colors, theme, toggleTheme } = useContext(ThemeContext);
   const { carregando, erro, origem, produtos } = useContext(ProdutosContext);
 
   function renderHeader() {
-    const themeLabel = theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro";
+    const themeLabel = theme === "dark" ? t("home.themeLight") : t("home.themeDark");
 
     return (
       <View style={styles.headerWrap}>
@@ -40,61 +44,67 @@ export default function Home() {
           />
 
           <View style={styles.topBar}>
-            <View style={[styles.brandMark, { backgroundColor: colors.accent }]}>
-              <Text
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                style={[styles.brandMarkText, { color: colors.accentText }]}
-              >
-                BT
-              </Text>
-            </View>
+            <BrandLogo size={58} style={styles.brandLogo} />
 
-            <FocusablePressable
-              accessibilityHint="Alterna entre o tema claro e o tema escuro."
-              accessibilityLabel={themeLabel}
-              accessibilityRole="button"
-              hitSlop={8}
-              onPress={toggleTheme}
-              style={({ pressed }) => [
-                styles.themeButton,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  opacity: pressed ? 0.84 : 1,
-                },
-              ]}
-            >
-              <Ionicons
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                name={theme === "dark" ? "sunny" : "moon"}
-                size={18}
-                color={colors.text}
-              />
-              <Text style={[styles.themeButtonText, { color: colors.text }]}>
-                {theme === "dark" ? "Claro" : "Escuro"}
-              </Text>
-            </FocusablePressable>
+            <View style={styles.topActions}>
+              <LanguageToggle compact />
+
+              <FocusablePressable
+                accessibilityHint={t("home.themeToggleHint")}
+                accessibilityLabel={themeLabel}
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={toggleTheme}
+                style={({ pressed }) => [
+                  styles.themeButton,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    opacity: pressed ? 0.84 : 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  name={theme === "dark" ? "sunny" : "moon"}
+                  size={18}
+                  color={colors.text}
+                />
+                <Text style={[styles.themeButtonText, { color: colors.text }]}>
+                  {theme === "dark" ? t("home.light") : t("home.dark")}
+                </Text>
+              </FocusablePressable>
+            </View>
           </View>
 
           <Text style={[styles.eyebrow, { color: colors.accent }]}>
-            Loja Musical
+            {t("home.type")}
           </Text>
           <Text accessibilityRole="header" style={[styles.logo, { color: colors.text }]}>
-            BlackTone Music
+            {t("home.title")}
           </Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            Instrumentos, vinis e acessórios selecionados para quem vive música todos os dias.
+            {t("home.subtitle")}
           </Text>
         </View>
 
         <View style={styles.sectionHeader}>
           <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>
-            Destaques da loja
+            {t("home.featured")}
           </Text>
           <Text style={[styles.sectionMeta, { color: colors.mutedText }]}>
-            {carregando ? "Carregando" : `${produtos.length} itens`}
+            {carregando
+              ? t("common.loading")
+              : `${produtos.length} ${
+                  language === "en"
+                    ? produtos.length === 1
+                      ? "item"
+                      : "items"
+                    : produtos.length === 1
+                      ? "item"
+                      : "itens"
+                }`}
           </Text>
         </View>
 
@@ -103,7 +113,7 @@ export default function Home() {
             accessibilityLiveRegion="polite"
             style={[styles.dataStatus, { color: colors.secondaryText }]}
           >
-            Usando produtos locais enquanto o Firestore e configurado.
+            {t("home.localProducts")}
           </Text>
         )}
 
@@ -112,7 +122,7 @@ export default function Home() {
             accessibilityLiveRegion="polite"
             style={[styles.dataStatus, { color: colors.secondaryText }]}
           >
-            Produtos carregados do Firestore.
+            {t("common.products")}
           </Text>
         )}
       </View>
@@ -122,8 +132,8 @@ export default function Home() {
   function renderItem({ item }: { item: Produto }) {
     return (
       <FocusablePressable
-        accessibilityHint="Abre a tela de detalhes do produto."
-        accessibilityLabel={`Abrir detalhes de ${item.nome}, ${item.categoria}, preço ${item.preco}`}
+        accessibilityHint={t("home.openProduct")}
+        accessibilityLabel={language === "en" ? `Open details for ${item.nome}, ${item.categoria}, price ${item.preco}` : `Abrir detalhes de ${item.nome}, ${item.categoria}, pre?o ${item.preco}`}
         accessibilityRole="button"
         hitSlop={6}
         onPress={() => router.push(`/produto/${item.id}`)}
@@ -139,7 +149,7 @@ export default function Home() {
       >
         <View style={[styles.imageShell, { backgroundColor: colors.backgroundSoft }]}> 
           <Image
-            accessibilityLabel={`Imagem do produto ${item.nome}`}
+            accessibilityLabel={language === "en" ? `Product image ${item.nome}` : `Imagem do produto ${item.nome}`}
             accessibilityRole="image"
             source={item.imagem}
             style={styles.image}
@@ -161,7 +171,7 @@ export default function Home() {
         <Text style={[styles.price, { color: colors.text }]}>{item.preco}</Text>
 
         <Text style={[styles.installment, { color: colors.mutedText }]}> 
-          10x sem juros no cartão
+          {t("home.installments")}
         </Text>
       </FocusablePressable>
     );
@@ -173,7 +183,7 @@ export default function Home() {
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <FlatList
-        accessibilityLabel="Lista de produtos em destaque"
+        accessibilityLabel={t("home.featuredList")}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={styles.productsContainer}
         data={produtos}
@@ -220,17 +230,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 34,
   },
-  brandMark: {
+  topActions: {
     alignItems: "center",
-    borderRadius: 18,
-    height: 52,
-    justifyContent: "center",
-    width: 52,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "flex-end",
   },
-  brandMarkText: {
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: 1,
+  brandLogo: {
+    borderRadius: 18,
+    marginBottom: 0,
   },
   themeButton: {
     alignItems: "center",

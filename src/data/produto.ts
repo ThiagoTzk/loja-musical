@@ -13,16 +13,18 @@ export type Produto = {
 };
 
 const imagensLocais: Record<string, ImageSourcePropType> = {
-  "1": require("../../assets/images/produto1.webp"),
-  "2": require("../../assets/images/produto2.webp"),
-  "3": require("../../assets/images/produto3.webp"),
-  "4": require("../../assets/images/produto4.webp"),
-  "5": require("../../assets/images/produto5.webp"),
+  "1": require("../../assets/images/ProdutoGuitarra.webp"),
+  "2": require("../../assets/images/ProdutoAlbumDamn.webp"),
+  "3": require("../../assets/images/ProdutoAlbumDtmf.webp"),
+  "4": require("../../assets/images/ProdutoAlbumRuby.webp"),
+  "5": require("../../assets/images/ProdutoTecladoYamaha.webp"),
 };
 
 export function resolverImagemProduto(id: string, imagemUrl?: string) {
-  if (imagemUrl) {
-    return { uri: imagemUrl };
+  const url = imagemUrl?.trim();
+
+  if (url) {
+    return { uri: url };
   }
 
   return imagensLocais[id] ?? imagensLocais["1"];
@@ -72,5 +74,15 @@ export const produtos: Produto[] = [
       "Album de edicao especial para completar uma colecao musical autoral.",
     imagem: resolverImagemProduto("4"),
     imagemLocal: "4",
+  },
+  {
+    id: "5",
+    nome: "Teclado Yamaha",
+    preco: "R$ 1.299,90",
+    precoNumero: 1299.9,
+    categoria: "Teclados",
+    descricao: "Teclado musical para iniciantes e estudos.",
+    imagem: resolverImagemProduto("5"),
+    imagemLocal: "5",
   },
 ];

@@ -1,16 +1,24 @@
 import { AccessibleButton } from "@/components/accessible-button";
 import { FocusablePressable } from "@/components/focusable-pressable";
 import { CarrinhoContext } from "@/src/context/CarrinhoContext";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
-import { UsuarioContext } from "@/src/context/UsuarioContext";
+import {
+  EnderecoPadrao,
+  formatarEndereco,
+  UsuarioContext,
+} from "@/src/context/UsuarioContext";
+import { buscarEnderecoPorCep } from "@/src/services/cep";
 import { criarPedidoFirestore } from "@/src/services/firestore";
 import { formatarMoeda, precoParaNumero } from "@/src/utils/preco";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState, type ComponentProps } from "react";
 import {
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,10 +27,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const FORMAS_PAGAMENTO = ["Crédito", "Débito", "Pix"];
+type IconName = ComponentProps<typeof Ionicons>["name"];
+type ModoCartao = "padrao" | "outro";
+
 const PARCELAS = Array.from({ length: 10 }, (_, index) => String(index + 1));
-const PAGAMENTO_CREDITO = FORMAS_PAGAMENTO[0];
-const PAGAMENTO_PIX = FORMAS_PAGAMENTO[2];
+const PAGAMENTO_CREDITO = "Crédito";
+const PAGAMENTO_PIX = "Pix";
+
+const enderecoVazio: EnderecoPadrao = {
+  bairro: "",
+  cep: "",
+  cidade: "",
+  complemento: "",
+  estado: "",
+  numero: "",
+  rua: "",
+};
 
 function apenasNumeros(valor: string) {
   return valor.replace(/\D/g, "");
@@ -73,32 +93,137 @@ function validadeCartaoValida(valor: string) {
   return ultimoDiaDoMes >= agora;
 }
 
+function cartaoMascarado(valor: string) {
+  const numeros = apenasNumeros(valor);
+
+  if (numeros.length < 16) return "**** **** **** ****";
+
+  return `**** **** **** ${numeros.slice(-4)}`;
+}
+
 export default function Pagamento() {
+  const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { carrinho, removerProduto, limparCarrinho } = useContext(CarrinhoContext);
   const { usuario, adicionarHistorico } = useContext(UsuarioContext);
 
-  const [cpf, setCpf] = useState("");
-  const [endereco, setEndereco] = useState("");
+  const [endereco, setEndereco] = useState<EnderecoPadrao>(
+    usuario?.enderecoPadrao ?? enderecoVazio
+  );
   const [formaPagamento, setFormaPagamento] = useState("");
+  const [modoCartao, setModoCartao] = useState<ModoCartao>(
+    usuario?.cartaoPadrao ? "padrao" : "outro"
+  );
   const [parcelas, setParcelas] = useState("");
   const [numeroCartao, setNumeroCartao] = useState("");
   const [cvv, setCvv] = useState("");
   const [validade, setValidade] = useState("");
   const [erro, setErro] = useState("");
+  const [erroCep, setErroCep] = useState("");
+  const [mensagemCep, setMensagemCep] = useState("");
   const [finalizando, setFinalizando] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
   const [mostrarPopup, setMostrarPopup] = useState(false);
 
-  function formatarCPF(valor: string) {
-    let v = apenasNumeros(valor).slice(0, 11);
+  const total = carrinho.reduce((acc, item) => acc + precoParaNumero(item.preco), 0);
+  const quantidadeItens = carrinho.length;
+  const usaCartao = formaPagamento !== PAGAMENTO_PIX && formaPagamento !== "";
+  const usaParcelas = formaPagamento === PAGAMENTO_CREDITO;
+  const usandoCartaoPadrao = usaCartao && modoCartao === "padrao" && Boolean(usuario?.cartaoPadrao);
+  const cpfUsuario = usuario?.cpf ?? "";
+  const enderecoResumo = formatarEndereco(endereco);
+  const quantidadeLabel =
+    language === "en"
+      ? quantidadeItens === 1
+        ? "1 selected item"
+        : `${quantidadeItens} selected items`
+      : quantidadeItens === 1
+        ? "1 item selecionado"
+        : `${quantidadeItens} itens selecionados`;
+  const formasPagamento: {
+    detalhe: string;
+    icon: IconName;
+    titulo: string;
+    valor: string;
+  }[] = [
+    {
+      detalhe: t("checkout.creditDetail"),
+      icon: "card",
+      titulo: t("checkout.credit"),
+      valor: PAGAMENTO_CREDITO,
+    },
+    {
+      detalhe: t("checkout.debitDetail"),
+      icon: "wallet",
+      titulo: t("checkout.debit"),
+      valor: "Débito",
+    },
+    {
+      detalhe: t("checkout.pixDetail"),
+      icon: "qr-code",
+      titulo: t("checkout.pix"),
+      valor: PAGAMENTO_PIX,
+    },
+  ];
 
-    v = v.replace(/(\d{3})(\d)/, "$1.$2");
-    v = v.replace(/(\d{3})(\d)/, "$1.$2");
-    v = v.replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-
-    return v;
+  function textoFormaPagamento(valor: string) {
+    if (valor === PAGAMENTO_CREDITO) return t("checkout.credit");
+    if (valor === PAGAMENTO_PIX) return t("checkout.pix");
+    return t("checkout.debit");
   }
+
+  function textoParcelas(valor: string) {
+    return language === "en" ? `${valor}x interest-free` : `${valor}x sem juros`;
+  }
+
+  useEffect(() => {
+    const cepLimpo = apenasNumeros(endereco.cep);
+
+    if (cepLimpo.length !== 8) {
+      setBuscandoCep(false);
+      setErroCep("");
+      setMensagemCep("");
+      return;
+    }
+
+    let ativo = true;
+    setBuscandoCep(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const dadosEndereco = await buscarEnderecoPorCep(endereco.cep);
+
+        if (!ativo) return;
+
+        setEndereco((enderecoAtual) => ({
+          ...enderecoAtual,
+          bairro: dadosEndereco.bairro || enderecoAtual.bairro,
+          cep: dadosEndereco.cep || enderecoAtual.cep,
+          cidade: dadosEndereco.cidade || enderecoAtual.cidade,
+          complemento: enderecoAtual.complemento || dadosEndereco.complemento || "",
+          estado: dadosEndereco.estado || enderecoAtual.estado,
+          rua: dadosEndereco.rua || enderecoAtual.rua,
+        }));
+        setErroCep("");
+        setMensagemCep(t("cep.found"));
+      } catch {
+        if (!ativo) return;
+
+        setMensagemCep("");
+        setErroCep(t("cep.error"));
+      } finally {
+        if (ativo) {
+          setBuscandoCep(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      ativo = false;
+      clearTimeout(timer);
+    };
+  }, [endereco.cep, t]);
 
   function formatarCartao(valor: string) {
     return apenasNumeros(valor)
@@ -116,6 +241,34 @@ export default function Pagamento() {
     return v;
   }
 
+  function formatarCEP(valor: string) {
+    return apenasNumeros(valor)
+      .slice(0, 8)
+      .replace(/(\d{5})(\d{1,3})/, "$1-$2");
+  }
+
+  function enderecoCompleto(enderecoAtual: EnderecoPadrao) {
+    return Boolean(
+      enderecoAtual.rua.trim() &&
+        enderecoAtual.numero.trim() &&
+        enderecoAtual.bairro.trim() &&
+        enderecoAtual.cidade.trim() &&
+        enderecoAtual.estado.trim()
+    );
+  }
+
+  function atualizarEndereco(campo: keyof EnderecoPadrao, valor: string) {
+    if (campo === "cep") {
+      setMensagemCep("");
+      setErroCep("");
+    }
+
+    setEndereco((enderecoAtual) => ({
+      ...enderecoAtual,
+      [campo]: campo === "cep" ? formatarCEP(valor) : valor,
+    }));
+  }
+
   function selecionarPagamento(opcao: string) {
     setFormaPagamento(opcao);
     setErro("");
@@ -128,23 +281,36 @@ export default function Pagamento() {
       setNumeroCartao("");
       setCvv("");
       setValidade("");
+      return;
     }
+
+    setModoCartao(usuario?.cartaoPadrao ? "padrao" : "outro");
   }
 
   function validar() {
-    if (carrinho.length === 0) return "Seu carrinho está vazio";
-    if (!cpfValido(cpf)) return "CPF inválido";
-    if (endereco.trim().length < 5) return "Endereço muito curto";
-    if (!formaPagamento) return "Selecione a forma de pagamento";
+    if (carrinho.length === 0) return t("checkout.cartEmptyError");
+    if (!cpfValido(cpfUsuario)) {
+      return t("checkout.cpfError");
+    }
+    if (!enderecoCompleto(endereco)) {
+      return t("checkout.addressError");
+    }
+    if (!formaPagamento) return t("checkout.paymentError");
 
     if (formaPagamento !== PAGAMENTO_PIX) {
-      if (!numeroCartao || !cvv || !validade) return "Preencha os dados do cartão";
-      if (apenasNumeros(numeroCartao).length < 16) return "Número do cartão incompleto";
-      if (!cartaoValido(numeroCartao)) return "Número do cartão inválido";
-      if (apenasNumeros(cvv).length < 3) return "CVV incompleto";
-      if (validade.length < 5) return "Validade incompleta";
-      if (!validadeCartaoValida(validade)) return "Validade do cartão inválida ou vencida";
-      if (formaPagamento === PAGAMENTO_CREDITO && !parcelas) return "Selecione as parcelas";
+      if (modoCartao === "padrao") {
+        if (!usuario?.cartaoPadrao) return t("checkout.defaultCardError");
+      } else {
+        if (!numeroCartao || !cvv || !validade) return t("checkout.cardDataError");
+        if (apenasNumeros(numeroCartao).length < 16) return t("checkout.cardIncompleteError");
+        if (!cartaoValido(numeroCartao)) {
+          return t("checkout.cardInvalidError");
+        }
+        if (apenasNumeros(cvv).length < 3) return t("checkout.cvvError");
+        if (validade.length < 5) return t("checkout.validityIncompleteError");
+        if (!validadeCartaoValida(validade)) return t("checkout.validityError");
+      }
+      if (formaPagamento === PAGAMENTO_CREDITO && !parcelas) return t("checkout.installmentsError");
     }
 
     return null;
@@ -178,11 +344,16 @@ export default function Pagamento() {
     setFinalizando(true);
     setErro("");
 
+    const descricaoPagamento =
+      usandoCartaoPadrao && usuario.cartaoPadrao
+        ? `${textoFormaPagamento(formaPagamento)} - ${usuario.cartaoPadrao.apelido} ${t("checkout.cardFinal")} ${usuario.cartaoPadrao.ultimos4}`
+        : textoFormaPagamento(formaPagamento);
+
     try {
       await criarPedidoFirestore({
-        cpf,
-        endereco,
-        formaPagamento,
+        cpf: cpfUsuario,
+        endereco: enderecoResumo,
+        formaPagamento: descricaoPagamento,
         parcelas: formaPagamento === PAGAMENTO_CREDITO ? parcelas : undefined,
         produtos: carrinho,
         total,
@@ -190,7 +361,7 @@ export default function Pagamento() {
       });
 
       adicionarHistorico(carrinho, {
-        formaPagamento,
+        formaPagamento: descricaoPagamento,
         parcelas: formaPagamento === PAGAMENTO_CREDITO ? parcelas : undefined,
       });
       limparCarrinho();
@@ -199,203 +370,220 @@ export default function Pagamento() {
     } catch (error) {
       console.warn("Nao foi possivel salvar o pedido no Firestore.", error);
       setMostrarConfirmacao(false);
-      setErro(
-        "Nao foi possivel salvar o pedido no Firebase. Confira as regras do Firestore e tente novamente."
-      );
+      setErro(t("checkout.firebaseError"));
     } finally {
       setFinalizando(false);
     }
   }
 
-  const total = carrinho.reduce((acc, item) => acc + precoParaNumero(item.preco), 0);
-  const usaCartao = formaPagamento !== PAGAMENTO_PIX && formaPagamento !== "";
-  const usaParcelas = formaPagamento === PAGAMENTO_CREDITO;
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}> 
-          Pagamento
-        </Text>
-        <Text style={[styles.subtitulo, { color: colors.secondaryText }]}> 
-          Complete os dados com calma. Campos e erros são anunciados para tecnologias assistivas.
-        </Text>
-
-        <View
-          style={[
-            styles.section,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}> 
-              Resumo do pedido
-            </Text>
-            <Text style={[styles.total, { color: colors.text }]}>{formatarMoeda(total)}</Text>
-          </View>
-
-          {carrinho.length === 0 && (
-            <Text accessibilityRole="summary" style={[styles.emptyCart, { color: colors.secondaryText }]}> 
-              Seu carrinho está vazio.
-            </Text>
-          )}
-
-          {carrinho.map((item, index) => (
-            <View key={`${item.id}-${index}`} style={styles.produto}>
-              <Image
-                accessibilityLabel={`Imagem do produto ${item.nome}`}
-                accessibilityRole="image"
-                source={item.imagem}
-                style={[styles.imagem, { backgroundColor: colors.backgroundSoft }]}
-              />
-
-              <View style={styles.productInfo}>
-                <Text style={[styles.productName, { color: colors.text }]}>{item.nome}</Text>
-                <Text style={[styles.productPrice, { color: colors.secondaryText }]}> 
-                  {item.preco}
-                </Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboardView}
+      >
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View
+            style={[
+              styles.hero,
+              {
+                backgroundColor: colors.cardStrong,
+                borderColor: colors.border,
+                shadowColor: colors.shadow,
+              },
+            ]}
+          >
+            <View style={styles.heroTop}>
+              <View style={styles.heroText}>
+                <Text style={[styles.kicker, { color: colors.accent }]}>{t("checkout.secure")}</Text>
+                <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}>{t("checkout.title")}</Text>
+                <Text style={[styles.subtitulo, { color: colors.secondaryText }]}>{t("checkout.subtitle")}</Text>
               </View>
 
-              <FocusablePressable
-                accessibilityHint="Remove este produto do pedido."
-                accessibilityLabel={`Remover ${item.nome}`}
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={() => removerProduto(index)}
-                style={({ pressed }) => [
-                  styles.removeButton,
-                  {
-                    backgroundColor: colors.dangerBackground,
-                    borderColor: colors.danger,
-                    opacity: pressed ? 0.82 : 1,
-                  },
+              <View style={[styles.secureBadge, { backgroundColor: colors.card }]}>
+                <Ionicons
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  name="shield-checkmark"
+                  size={18}
+                  color={colors.success}
+                />
+                <Text style={[styles.secureText, { color: colors.text }]}>{t("checkout.secure")}</Text>
+              </View>
+            </View>
+
+            <View style={styles.checkoutSteps}>
+              {[t("checkout.summary"), t("checkout.delivery"), t("checkout.paymentStep")].map((etapa, index) => (
+                <View key={etapa} style={styles.checkoutStep}>
+                  <View
+                    style={[
+                      styles.stepNumber,
+                      {
+                        backgroundColor: colors.accent,
+                        borderColor: colors.borderStrong,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.stepNumberText, { color: colors.accentText }]}>
+                      {index + 1}
+                    </Text>
+                  </View>
+                  <Text style={[styles.stepLabel, { color: colors.secondaryText }]}>{etapa}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.summaryCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View>
+              <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>{t("checkout.total")}</Text>
+              <Text accessibilityLiveRegion="polite" style={[styles.summaryTotal, { color: colors.text }]}>
+                {formatarMoeda(total)}
+              </Text>
+            </View>
+            <View style={[styles.summaryPill, { backgroundColor: colors.backgroundSoft }]}>
+              <Text style={[styles.summaryPillText, { color: colors.secondaryText }]}>
+                {quantidadeLabel}
+              </Text>
+            </View>
+          </View>
+
+          {!cpfValido(cpfUsuario) && (
+            <View
+              style={[
+                styles.profileWarning,
+                { backgroundColor: colors.dangerBackground, borderColor: colors.danger },
+              ]}
+            >
+              <Ionicons
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                name="alert-circle"
+                size={22}
+                color={colors.danger}
+              />
+              <View style={styles.profileWarningText}>
+                <Text style={[styles.warningTitle, { color: colors.danger }]}>{t("checkout.cpfRequired")}</Text>
+                <Text style={[styles.helperText, { color: colors.danger }]}>
+                  {t("checkout.cpfRequiredText")}
+                </Text>
+              </View>
+              <AccessibleButton
+                accessibilityHint={t("checkout.editProfileHint")}
+                onPress={() => router.push("/dados-conta")}
+                style={styles.warningButton}
+                textStyle={styles.warningButtonText}
+                variant="danger"
+              >
+                {t("common.edit")}
+              </AccessibleButton>
+            </View>
+          )}
+
+          <View
+            style={[
+              styles.section,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.sectionHeader}>
+              <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>
+                {t("checkout.productsSelected")}
+              </Text>
+              <Text style={[styles.sectionMeta, { color: colors.mutedText }]}>
+                {quantidadeItens} {quantidadeItens === 1 ? t("common.item") : t("common.items")}
+              </Text>
+            </View>
+
+            {carrinho.length === 0 && (
+              <View style={[styles.emptyCartBox, { backgroundColor: colors.backgroundSoft }]}>
+                <Text accessibilityRole="summary" style={[styles.emptyCart, { color: colors.secondaryText }]}>
+                  {t("checkout.emptyCart")}
+                </Text>
+                <AccessibleButton
+                  accessibilityHint={t("checkout.emptyCartBackHint")}
+                  onPress={() => router.push("/(tabs)")}
+                  style={styles.shopButton}
+                  variant="secondary"
+                >
+                  {t("common.viewProducts")}
+                </AccessibleButton>
+              </View>
+            )}
+
+            {carrinho.map((item, index) => (
+              <View
+                key={`${item.id}-${index}`}
+                style={[
+                  styles.produto,
+                  { backgroundColor: colors.backgroundSoft, borderColor: colors.border },
                 ]}
               >
-                <Text style={[styles.removeText, { color: colors.danger }]}>Remover</Text>
-              </FocusablePressable>
-            </View>
-          ))}
-        </View>
+                <Image
+                  accessibilityLabel={`Imagem do produto ${item.nome}`}
+                  accessibilityRole="image"
+                  source={item.imagem}
+                  style={[styles.imagem, { backgroundColor: colors.card }]}
+                />
 
-        <View
-          style={[
-            styles.section,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}> 
-            Dados de entrega
-          </Text>
+                <View style={styles.productInfo}>
+                  <Text style={[styles.productName, { color: colors.text }]}>{item.nome}</Text>
+                  <Text style={[styles.productCategory, { color: colors.secondaryText }]}>
+                    {item.categoria}
+                  </Text>
+                  <Text style={[styles.productPrice, { color: colors.text }]}>{item.preco}</Text>
+                </View>
 
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>CPF</Text>
-            <TextInput
-              accessibilityHint="Digite os 11 números do CPF. A máscara será aplicada automaticamente."
-              accessibilityLabel="CPF"
-              keyboardType="numeric"
-              onChangeText={(text) => setCpf(formatarCPF(text))}
-              placeholder="000.000.000-00"
-              placeholderTextColor={colors.mutedText}
-              returnKeyType="next"
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: colors.border,
-                  color: colors.text,
-                },
-              ]}
-              value={cpf}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>Endereço</Text>
-            <TextInput
-              accessibilityHint="Digite o endereço de entrega."
-              accessibilityLabel="Endereço de entrega"
-              autoCapitalize="words"
-              onChangeText={setEndereco}
-              placeholder="Rua, número, bairro e cidade"
-              placeholderTextColor={colors.mutedText}
-              returnKeyType="next"
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: colors.border,
-                  color: colors.text,
-                },
-              ]}
-              value={endereco}
-            />
-          </View>
-        </View>
-
-        <View
-          style={[
-            styles.section,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}> 
-            Forma de pagamento
-          </Text>
-
-          <View accessibilityRole="radiogroup" style={styles.paymentOptions}>
-            {FORMAS_PAGAMENTO.map((opcao) => {
-              const selected = formaPagamento === opcao;
-
-              return (
                 <FocusablePressable
-                  accessibilityHint={`Seleciona pagamento por ${opcao}.`}
-                  accessibilityLabel={opcao}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  hitSlop={6}
-                  key={opcao}
-                  onPress={() => selecionarPagamento(opcao)}
+                  accessibilityHint={t("checkout.removeProductHint")}
+                  accessibilityLabel={`Remover ${item.nome}`}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={() => removerProduto(index)}
                   style={({ pressed }) => [
-                    styles.paymentOption,
+                    styles.iconButton,
                     {
-                      backgroundColor: selected ? colors.accent : colors.inputBackground,
-                      borderColor: selected ? colors.borderStrong : colors.border,
-                      opacity: pressed ? 0.84 : 1,
+                      backgroundColor: colors.dangerBackground,
+                      borderColor: colors.danger,
+                      opacity: pressed ? 0.82 : 1,
                     },
                   ]}
                 >
                   <Ionicons
                     accessibilityElementsHidden
                     importantForAccessibility="no"
-                    name={selected ? "checkmark-circle" : "ellipse-outline"}
+                    name="trash-outline"
                     size={20}
-                    color={selected ? colors.accentText : colors.secondaryText}
+                    color={colors.danger}
                   />
-                  <Text
-                    style={[
-                      styles.paymentText,
-                      { color: selected ? colors.accentText : colors.text },
-                    ]}
-                  >
-                    {opcao}
-                  </Text>
                 </FocusablePressable>
-              );
-            })}
+              </View>
+            ))}
           </View>
 
-          {usaCartao && (
-            <View style={styles.cardFields}>
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.label, { color: colors.text }]}>Número do cartão</Text>
+          <View
+            style={[
+              styles.section,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>{t("checkout.delivery")}</Text>
+            <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{t("checkout.deliveryHint")}</Text>
+
+            <View style={styles.rowFields}>
+              <View style={[styles.fieldGroup, styles.flexField]}>
+                <Text style={[styles.label, { color: colors.text }]}>CEP</Text>
                 <TextInput
-                  accessibilityHint="Digite os 16 números do cartão."
-                  accessibilityLabel="Número do cartão"
+                  accessibilityLabel={t("checkout.deliveryCepLabel")}
                   keyboardType="numeric"
-                  onChangeText={(text) => setNumeroCartao(formatarCartao(text))}
-                  placeholder="0000 0000 0000 0000"
+                  onChangeText={(text) => atualizarEndereco("cep", text)}
+                  placeholder="00000-000"
                   placeholderTextColor={colors.mutedText}
-                  returnKeyType="next"
                   style={[
                     styles.input,
                     {
@@ -404,122 +592,465 @@ export default function Pagamento() {
                       color: colors.text,
                     },
                   ]}
-                  value={numeroCartao}
+                  value={endereco.cep}
+                />
+                {(buscandoCep || mensagemCep !== "" || erroCep !== "") && (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    style={[
+                      styles.cepStatus,
+                      { color: erroCep ? colors.danger : colors.secondaryText },
+                    ]}
+                  >
+                    {buscandoCep ? t("cep.loading") : erroCep || mensagemCep}
+                  </Text>
+                )}
+              </View>
+
+              <View style={[styles.fieldGroup, styles.stateField]}>
+                <Text style={[styles.label, { color: colors.text }]}>UF</Text>
+                <TextInput
+                  accessibilityLabel={t("checkout.deliveryStateLabel")}
+                  autoCapitalize="characters"
+                  maxLength={2}
+                  onChangeText={(text) => atualizarEndereco("estado", text.toUpperCase())}
+                  placeholder="SP"
+                  placeholderTextColor={colors.mutedText}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.inputBackground,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={endereco.estado}
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, { color: colors.text }]}>{t("account.street")}</Text>
+              <TextInput
+                accessibilityLabel={t("checkout.deliveryStreetLabel")}
+                autoCapitalize="words"
+                onChangeText={(text) => atualizarEndereco("rua", text)}
+                placeholder={t("account.streetPlaceholder")}
+                placeholderTextColor={colors.mutedText}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.inputBackground,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={endereco.rua}
+              />
+            </View>
+
+            <View style={styles.rowFields}>
+              <View style={[styles.fieldGroup, styles.numberField]}>
+                <Text style={[styles.label, { color: colors.text }]}>{t("account.number")}</Text>
+                <TextInput
+                  accessibilityLabel={t("checkout.deliveryNumberLabel")}
+                  onChangeText={(text) => atualizarEndereco("numero", text)}
+                  placeholder="123"
+                  placeholderTextColor={colors.mutedText}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.inputBackground,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={endereco.numero}
                 />
               </View>
 
-              <View style={styles.rowFields}>
-                <View style={[styles.fieldGroup, styles.flexField]}>
-                  <Text style={[styles.label, { color: colors.text }]}>CVV</Text>
-                  <TextInput
-                    accessibilityHint="Digite os três ou quatro números do código de segurança."
-                    accessibilityLabel="CVV"
-                    keyboardType="numeric"
-                    maxLength={4}
-                    onChangeText={(text) => setCvv(text.replace(/\D/g, "").slice(0, 4))}
-                    placeholder="123"
-                    placeholderTextColor={colors.mutedText}
-                    returnKeyType="next"
-                    secureTextEntry
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: colors.inputBackground,
-                        borderColor: colors.border,
-                        color: colors.text,
-                      },
-                    ]}
-                    value={cvv}
-                  />
-                </View>
-
-                <View style={[styles.fieldGroup, styles.flexField]}>
-                  <Text style={[styles.label, { color: colors.text }]}>Validade</Text>
-                  <TextInput
-                    accessibilityHint="Digite mês e ano da validade no formato mês barra ano."
-                    accessibilityLabel="Validade do cartão"
-                    keyboardType="numeric"
-                    onChangeText={(text) => setValidade(formatarValidade(text))}
-                    placeholder="MM/AA"
-                    placeholderTextColor={colors.mutedText}
-                    returnKeyType="done"
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: colors.inputBackground,
-                        borderColor: colors.border,
-                        color: colors.text,
-                      },
-                    ]}
-                    value={validade}
-                  />
-                </View>
+              <View style={[styles.fieldGroup, styles.flexField]}>
+                <Text style={[styles.label, { color: colors.text }]}>{t("account.neighborhood")}</Text>
+                <TextInput
+                  accessibilityLabel={t("checkout.deliveryNeighborhoodLabel")}
+                  autoCapitalize="words"
+                  onChangeText={(text) => atualizarEndereco("bairro", text)}
+                  placeholder={t("account.neighborhoodPlaceholder")}
+                  placeholderTextColor={colors.mutedText}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.inputBackground,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={endereco.bairro}
+                />
               </View>
-
-              {usaParcelas && (
-                <>
-                  <Text style={[styles.label, { color: colors.text }]}>Parcelas</Text>
-                  <View accessibilityRole="radiogroup" style={styles.installmentsGrid}>
-                    {PARCELAS.map((opcao) => {
-                      const selected = parcelas === opcao;
-
-                      return (
-                        <FocusablePressable
-                          accessibilityHint={`Seleciona ${opcao} parcela${opcao === "1" ? "" : "s"} sem juros.`}
-                          accessibilityLabel={`${opcao}x sem juros`}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected }}
-                          hitSlop={6}
-                          key={opcao}
-                          onPress={() => setParcelas(opcao)}
-                          style={({ pressed }) => [
-                            styles.installmentOption,
-                            {
-                              backgroundColor: selected ? colors.accent : colors.inputBackground,
-                              borderColor: selected ? colors.borderStrong : colors.border,
-                              opacity: pressed ? 0.84 : 1,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.installmentText,
-                              { color: selected ? colors.accentText : colors.text },
-                            ]}
-                          >
-                            {opcao}x
-                          </Text>
-                        </FocusablePressable>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
             </View>
-          )}
-        </View>
 
-        {erro !== "" && (
-          <Text
-            accessibilityRole="alert"
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, { color: colors.text }]}>{t("account.city")}</Text>
+              <TextInput
+                accessibilityLabel={t("checkout.deliveryCityLabel")}
+                autoCapitalize="words"
+                onChangeText={(text) => atualizarEndereco("cidade", text)}
+                placeholder={t("account.cityPlaceholder")}
+                placeholderTextColor={colors.mutedText}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.inputBackground,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={endereco.cidade}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, { color: colors.text }]}>{t("account.complement")}</Text>
+              <TextInput
+                accessibilityLabel={t("checkout.deliveryComplementLabel")}
+                onChangeText={(text) => atualizarEndereco("complemento", text)}
+                placeholder={t("account.complementPlaceholder")}
+                placeholderTextColor={colors.mutedText}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.inputBackground,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={endereco.complemento}
+              />
+            </View>
+          </View>
+
+          <View
             style={[
-              styles.error,
-              { backgroundColor: colors.dangerBackground, color: colors.danger },
+              styles.section,
+              { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            {erro}
-          </Text>
-        )}
+            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>{t("checkout.payment")}</Text>
+            <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{t("checkout.paymentHint")}</Text>
 
-        <AccessibleButton
-          accessibilityHint="Valida os dados e abre a revisão do pedido antes de concluir."
-          disabled={carrinho.length === 0 || finalizando}
-          onPress={solicitarConfirmacao}
-          style={styles.confirmButton}
-        >
-          {finalizando ? "Finalizando pedido..." : "Confirmar pagamento"}
-        </AccessibleButton>
-      </ScrollView>
+            <View accessibilityRole="radiogroup" style={styles.paymentOptions}>
+              {formasPagamento.map((opcao) => {
+                const selected = formaPagamento === opcao.valor;
+
+                return (
+                  <FocusablePressable
+                    accessibilityHint={`Seleciona pagamento por ${opcao.titulo}.`}
+                    accessibilityLabel={opcao.titulo}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    hitSlop={6}
+                    key={opcao.valor}
+                    onPress={() => selecionarPagamento(opcao.valor)}
+                    style={({ pressed }) => [
+                      styles.paymentOption,
+                      {
+                        backgroundColor: selected ? colors.accent : colors.inputBackground,
+                        borderColor: selected ? colors.borderStrong : colors.border,
+                        opacity: pressed ? 0.84 : 1,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      accessibilityElementsHidden
+                      importantForAccessibility="no"
+                      name={opcao.icon}
+                      size={23}
+                      color={selected ? colors.accentText : colors.secondaryText}
+                    />
+                    <Text
+                      style={[
+                        styles.paymentText,
+                        { color: selected ? colors.accentText : colors.text },
+                      ]}
+                    >
+                      {opcao.titulo}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.paymentDetail,
+                        { color: selected ? colors.accentText : colors.secondaryText },
+                      ]}
+                    >
+                      {opcao.detalhe}
+                    </Text>
+                  </FocusablePressable>
+                );
+              })}
+            </View>
+
+            {usaCartao && (
+              <View style={styles.cardFields}>
+                <View accessibilityRole="radiogroup" style={styles.cardChoiceGrid}>
+                  {usuario?.cartaoPadrao && (
+                    <FocusablePressable
+                      accessibilityHint={t("checkout.useDefaultCardHint")}
+                      accessibilityLabel={t("checkout.useDefaultCard")}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: modoCartao === "padrao" }}
+                      onPress={() => setModoCartao("padrao")}
+                      style={({ pressed }) => [
+                        styles.cardChoice,
+                        {
+                          backgroundColor:
+                            modoCartao === "padrao" ? colors.accent : colors.inputBackground,
+                          borderColor:
+                            modoCartao === "padrao" ? colors.borderStrong : colors.border,
+                          opacity: pressed ? 0.84 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.cardChoiceTitle,
+                          { color: modoCartao === "padrao" ? colors.accentText : colors.text },
+                        ]}
+                      >{t("checkout.useDefaultCard")}</Text>
+                      <Text
+                        style={[
+                          styles.cardChoiceText,
+                          {
+                            color:
+                              modoCartao === "padrao"
+                                ? colors.accentText
+                                : colors.secondaryText,
+                          },
+                        ]}
+                      >
+                        {usuario.cartaoPadrao.apelido} {t("checkout.cardFinal")} {usuario.cartaoPadrao.ultimos4}
+                      </Text>
+                    </FocusablePressable>
+                  )}
+
+                  <FocusablePressable
+                    accessibilityHint={t("checkout.useAnotherCardHint")}
+                    accessibilityLabel={t("checkout.useAnotherCard")}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: modoCartao === "outro" }}
+                    onPress={() => setModoCartao("outro")}
+                    style={({ pressed }) => [
+                      styles.cardChoice,
+                      {
+                        backgroundColor:
+                          modoCartao === "outro" ? colors.accent : colors.inputBackground,
+                        borderColor:
+                          modoCartao === "outro" ? colors.borderStrong : colors.border,
+                        opacity: pressed ? 0.84 : 1,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.cardChoiceTitle,
+                        { color: modoCartao === "outro" ? colors.accentText : colors.text },
+                      ]}
+                    >{t("checkout.useAnotherCard")}</Text>
+                    <Text
+                      style={[
+                        styles.cardChoiceText,
+                        {
+                          color:
+                            modoCartao === "outro"
+                            ? colors.accentText
+                            : colors.secondaryText,
+                        },
+                      ]}
+                    >{t("checkout.typeAtPurchase")}</Text>
+                  </FocusablePressable>
+                </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.cardPreviewHeader}>
+                    <Text style={styles.cardPreviewBrand}>BlackTone Pay</Text>
+                    <Ionicons
+                      accessibilityElementsHidden
+                      importantForAccessibility="no"
+                      name="radio-outline"
+                      size={21}
+                      color="#F8FAFC"
+                    />
+                  </View>
+                  <Text style={styles.cardPreviewNumber}>
+                    {usandoCartaoPadrao && usuario?.cartaoPadrao
+                      ? `**** **** **** ${usuario.cartaoPadrao.ultimos4}`
+                      : cartaoMascarado(numeroCartao)}
+                  </Text>
+                  <View style={styles.cardPreviewFooter}>
+                    <Text style={styles.cardPreviewMeta}>
+                      {t("account.cardExpiration")}
+                      {usandoCartaoPadrao && usuario?.cartaoPadrao
+                        ? usuario.cartaoPadrao.validade
+                        : validade || "MM/AA"}
+                    </Text>
+                    <Text style={styles.cardPreviewMeta}>{textoFormaPagamento(formaPagamento)}</Text>
+                  </View>
+                </View>
+
+                {modoCartao === "outro" && (
+                  <>
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: colors.text }]}>{t("checkout.cardNumber")}</Text>
+                  <TextInput
+                    accessibilityHint={t("checkout.cardNumberHint")}
+                    accessibilityLabel={t("checkout.cardNumber")}
+                    keyboardType="numeric"
+                    onChangeText={(text) => setNumeroCartao(formatarCartao(text))}
+                    placeholder="0000 0000 0000 0000"
+                    placeholderTextColor={colors.mutedText}
+                    returnKeyType="next"
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.inputBackground,
+                        borderColor: colors.border,
+                        color: colors.text,
+                      },
+                    ]}
+                    value={numeroCartao}
+                  />
+                  <Text style={[styles.helperText, { color: colors.secondaryText }]}>
+                    {t("checkout.cardTestHint")}
+                  </Text>
+                </View>
+
+                <View style={styles.rowFields}>
+                  <View style={[styles.fieldGroup, styles.flexField]}>
+                    <Text style={[styles.label, { color: colors.text }]}>CVV</Text>
+                    <TextInput
+                      accessibilityHint={t("checkout.cvvHint")}
+                      accessibilityLabel="CVV"
+                      keyboardType="numeric"
+                      maxLength={4}
+                      onChangeText={(text) => setCvv(text.replace(/\D/g, "").slice(0, 4))}
+                      placeholder="123"
+                      placeholderTextColor={colors.mutedText}
+                      returnKeyType="next"
+                      secureTextEntry
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: colors.inputBackground,
+                          borderColor: colors.border,
+                          color: colors.text,
+                        },
+                      ]}
+                      value={cvv}
+                    />
+                  </View>
+
+                  <View style={[styles.fieldGroup, styles.flexField]}>
+                    <Text style={[styles.label, { color: colors.text }]}>{t("account.cardExpiration")}</Text>
+                    <TextInput
+                      accessibilityHint={t("checkout.cardValidityHint")}
+                      accessibilityLabel={t("account.cardExpirationLabel")}
+                      keyboardType="numeric"
+                      onChangeText={(text) => setValidade(formatarValidade(text))}
+                      placeholder="MM/AA"
+                      placeholderTextColor={colors.mutedText}
+                      returnKeyType="done"
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: colors.inputBackground,
+                          borderColor: colors.border,
+                          color: colors.text,
+                        },
+                      ]}
+                      value={validade}
+                    />
+                  </View>
+                </View>
+                  </>
+                )}
+
+                {usaParcelas && (
+                  <>
+                    <Text style={[styles.label, styles.installmentLabel, { color: colors.text }]}>{t("checkout.installments")}</Text>
+                    <View accessibilityRole="radiogroup" style={styles.installmentsGrid}>
+                      {PARCELAS.map((opcao) => {
+                        const selected = parcelas === opcao;
+
+                        return (
+                          <FocusablePressable
+                            accessibilityHint={language === "en" ? `Select ${opcao} interest-free installment${opcao === "1" ? "" : "s"}.` : `Seleciona ${opcao} parcela${opcao === "1" ? "" : "s"} sem juros.`}
+                            accessibilityLabel={textoParcelas(opcao)}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected }}
+                            hitSlop={6}
+                            key={opcao}
+                            onPress={() => setParcelas(opcao)}
+                            style={({ pressed }) => [
+                              styles.installmentOption,
+                              {
+                                backgroundColor: selected ? colors.accent : colors.inputBackground,
+                                borderColor: selected ? colors.borderStrong : colors.border,
+                                opacity: pressed ? 0.84 : 1,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.installmentText,
+                                { color: selected ? colors.accentText : colors.text },
+                              ]}
+                            >
+                              {opcao}x
+                            </Text>
+                          </FocusablePressable>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+
+          {erro !== "" && (
+            <Text
+              accessibilityRole="alert"
+              style={[
+                styles.error,
+                { backgroundColor: colors.dangerBackground, color: colors.danger },
+              ]}
+            >
+              {erro}
+            </Text>
+          )}
+
+          <View
+            style={[
+              styles.finalCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View>
+              <Text style={[styles.finalLabel, { color: colors.secondaryText }]}>{t("checkout.finalTotal")}</Text>
+              <Text style={[styles.finalTotal, { color: colors.text }]}>
+                {formatarMoeda(total)}
+              </Text>
+            </View>
+            <AccessibleButton
+              accessibilityHint={t("checkout.reviewHint")}
+              disabled={carrinho.length === 0 || finalizando}
+              onPress={solicitarConfirmacao}
+              style={styles.confirmButton}
+            >
+              {finalizando ? t("checkout.finalizing") : t("checkout.review")}
+            </AccessibleButton>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal
         animationType="fade"
@@ -527,58 +1058,65 @@ export default function Pagamento() {
         transparent
         visible={mostrarConfirmacao}
       >
-        <View style={[styles.modalContainer, { backgroundColor: colors.overlay }]}> 
+        <View style={[styles.modalContainer, { backgroundColor: colors.overlay }]}>
           <View
-            accessibilityLabel="Revisar e confirmar pedido"
+            accessibilityLabel={t("checkout.reviewModalLabel")}
             accessibilityRole="alert"
             accessibilityViewIsModal
             accessible
             style={[styles.modalBox, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}> 
-              Revisar pedido
-            </Text>
-            <Text style={[styles.modalText, { color: colors.secondaryText }]}> 
-              Confira os dados antes de concluir a compra.
-            </Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t("checkout.reviewTitle")}</Text>
+            <Text style={[styles.modalText, { color: colors.secondaryText }]}>{t("checkout.reviewText")}</Text>
 
-            <View style={[styles.reviewBox, { borderColor: colors.border }]}> 
-              <Text style={[styles.reviewLine, { color: colors.text }]}> 
-                Total: {formatarMoeda(total)}
-              </Text>
-              <Text style={[styles.reviewLine, { color: colors.text }]}> 
-                Forma: {formaPagamento}
-              </Text>
-              {usaParcelas && (
-                <Text style={[styles.reviewLine, { color: colors.text }]}> 
-                  Parcelas: {parcelas}x sem juros
+            <View style={[styles.reviewBox, { borderColor: colors.border }]}>
+              <View style={styles.reviewRow}>
+                <Text style={[styles.reviewLabel, { color: colors.secondaryText }]}>{t("common.total")}</Text>
+                <Text style={[styles.reviewValue, { color: colors.text }]}>{formatarMoeda(total)}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={[styles.reviewLabel, { color: colors.secondaryText }]}>{t("checkout.items")}</Text>
+                <Text style={[styles.reviewValue, { color: colors.text }]}>{quantidadeItens}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={[styles.reviewLabel, { color: colors.secondaryText }]}>{t("checkout.method")}</Text>
+                <Text style={[styles.reviewValue, { color: colors.text }]}>
+                  {usandoCartaoPadrao && usuario?.cartaoPadrao
+                    ? `${textoFormaPagamento(formaPagamento)} - ${usuario.cartaoPadrao.apelido} ${t("checkout.cardFinal")} ${usuario.cartaoPadrao.ultimos4}`
+                    : textoFormaPagamento(formaPagamento)}
                 </Text>
+              </View>
+              {usaParcelas && (
+                <View style={styles.reviewRow}>
+                  <Text style={[styles.reviewLabel, { color: colors.secondaryText }]}>{t("checkout.installments")}</Text>
+                  <Text style={[styles.reviewValue, { color: colors.text }]}>{textoParcelas(parcelas)}</Text>
+                </View>
               )}
-              <Text style={[styles.reviewLine, { color: colors.text }]}> 
-                CPF: {cpf}
-              </Text>
-              <Text style={[styles.reviewLine, { color: colors.text }]}> 
-                Endereço: {endereco}
-              </Text>
+              <View style={styles.reviewRow}>
+                <Text style={[styles.reviewLabel, { color: colors.secondaryText }]}>CPF</Text>
+                <Text style={[styles.reviewValue, { color: colors.text }]}>{cpfUsuario}</Text>
+              </View>
+              <View style={styles.reviewBlock}>
+                <Text style={[styles.reviewLabel, { color: colors.secondaryText }]}>{t("checkout.delivery")}</Text>
+                <Text style={[styles.reviewValue, { color: colors.text }]}>{enderecoResumo}</Text>
+              </View>
             </View>
 
             <AccessibleButton
-              accessibilityHint="Volta ao formulário de pagamento para corrigir os dados."
+              accessibilityHint={t("checkout.backAndEditHint")}
               disabled={finalizando}
               onPress={() => setMostrarConfirmacao(false)}
               style={styles.modalButton}
               variant="secondary"
-            >
-              Voltar e editar
-            </AccessibleButton>
+            >{t("checkout.backAndEdit")}</AccessibleButton>
 
             <AccessibleButton
-              accessibilityHint="Conclui a compra com os dados revisados."
+              accessibilityHint={t("checkout.confirmOrderHint")}
               disabled={finalizando}
               onPress={finalizar}
               style={styles.modalButton}
             >
-              {finalizando ? "Finalizando pedido..." : "Confirmar pedido"}
+              {finalizando ? t("checkout.finalizing") : t("checkout.confirmOrder")}
             </AccessibleButton>
           </View>
         </View>
@@ -590,7 +1128,7 @@ export default function Pagamento() {
         transparent
         visible={mostrarPopup}
       >
-        <View style={[styles.modalContainer, { backgroundColor: colors.overlay }]}> 
+        <View style={[styles.modalContainer, { backgroundColor: colors.overlay }]}>
           <View
             accessibilityRole="alert"
             accessibilityViewIsModal
@@ -605,29 +1143,21 @@ export default function Pagamento() {
               color={colors.success}
             />
 
-            <Text style={[styles.modalTitle, { color: colors.text }]}> 
-              Compra realizada com sucesso!
-            </Text>
-            <Text style={[styles.modalText, { color: colors.secondaryText }]}> 
-              Seu pedido foi salvo no histórico do perfil.
-            </Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t("checkout.successTitle")}</Text>
+            <Text style={[styles.modalText, { color: colors.secondaryText }]}>{t("checkout.successText")}</Text>
 
             <AccessibleButton
-              accessibilityHint="Fecha o aviso e volta para a página inicial."
+              accessibilityHint={t("checkout.goHomeHint")}
               onPress={() => router.replace("/(tabs)")}
               style={styles.modalButton}
-            >
-              Ir para Home
-            </AccessibleButton>
+            >{t("checkout.goHome")}</AccessibleButton>
 
             <AccessibleButton
-              accessibilityHint="Fecha o aviso e abre o histórico no perfil."
+              accessibilityHint={t("checkout.goHistoryHint")}
               onPress={() => router.replace("/(tabs)/perfil")}
               style={styles.modalButton}
               variant="secondary"
-            >
-              Ir para histórico
-            </AccessibleButton>
+            >{t("checkout.goHistory")}</AccessibleButton>
           </View>
         </View>
       </Modal>
@@ -636,6 +1166,88 @@ export default function Pagamento() {
 }
 
 const styles = StyleSheet.create({
+  cardChoice: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 5,
+    minHeight: 78,
+    minWidth: 140,
+    padding: 12,
+  },
+  cardChoiceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
+  cardChoiceText: {
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+  },
+  cardChoiceTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  cardFields: {
+    marginTop: 16,
+  },
+  cardPreview: {
+    backgroundColor: "#111827",
+    borderColor: "#334155",
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 28,
+    marginBottom: 4,
+    padding: 18,
+  },
+  cardPreviewBrand: {
+    color: "#F8FAFC",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  cardPreviewFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  cardPreviewHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  cardPreviewMeta: {
+    color: "#CBD5E1",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  cardPreviewNumber: {
+    color: "#F8FAFC",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+  },
+  checkoutStep: {
+    alignItems: "center",
+    flex: 1,
+    gap: 7,
+  },
+  checkoutSteps: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 22,
+  },
+  cepStatus: {
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 18,
+  },
+  confirmButton: {
+    flex: 1,
+    minWidth: 150,
+  },
   container: {
     flex: 1,
   },
@@ -643,85 +1255,89 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 36,
   },
-  titulo: {
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-    marginBottom: 8,
-  },
-  subtitulo: {
-    fontSize: 16,
-    lineHeight: 23,
-    marginBottom: 22,
-  },
-  section: {
-    borderRadius: 24,
-    borderWidth: 1,
-    marginBottom: 16,
-    padding: 16,
-  },
-  sectionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  total: {
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  produto: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
-  },
-  imagem: {
-    borderRadius: 14,
-    height: 64,
-    resizeMode: "contain",
-    width: 64,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-  removeButton: {
-    alignItems: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 12,
-  },
-  removeText: {
-    fontSize: 13,
-    fontWeight: "900",
-  },
   emptyCart: {
     fontSize: 15,
     lineHeight: 22,
+    textAlign: "center",
+  },
+  emptyCartBox: {
+    alignItems: "center",
+    borderRadius: 18,
+    gap: 14,
+    padding: 18,
+  },
+  error: {
+    borderRadius: 16,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 21,
+    marginBottom: 16,
+    padding: 14,
   },
   fieldGroup: {
     gap: 8,
     marginTop: 14,
   },
-  label: {
-    fontSize: 15,
+  finalCard: {
+    alignItems: "center",
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  finalLabel: {
+    fontSize: 13,
     fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  finalTotal: {
+    fontSize: 25,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  flexField: {
+    flex: 1,
+  },
+  hero: {
+    borderRadius: 30,
+    borderWidth: 1,
+    elevation: 6,
+    marginBottom: 16,
+    padding: 20,
+    shadowOffset: { height: 14, width: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+  },
+  heroText: {
+    flex: 1,
+  },
+  heroTop: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  helperText: {
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 18,
+  },
+  iconButton: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: "center",
+    width: 46,
+  },
+  imagem: {
+    borderRadius: 16,
+    height: 68,
+    resizeMode: "contain",
+    width: 68,
   },
   input: {
     borderRadius: 16,
@@ -730,38 +1346,8 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: 16,
   },
-  paymentOptions: {
-    gap: 10,
-    marginTop: 14,
-  },
-  paymentOption: {
-    alignItems: "center",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 52,
-    paddingHorizontal: 14,
-  },
-  paymentText: {
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  cardFields: {
-    marginTop: 6,
-  },
-  rowFields: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  flexField: {
-    flex: 1,
-  },
-  installmentsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: 10,
+  installmentLabel: {
+    marginTop: 16,
   },
   installmentOption: {
     alignItems: "center",
@@ -776,36 +1362,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
   },
-  error: {
-    borderRadius: 16,
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 21,
-    marginBottom: 16,
-    padding: 14,
+  installmentsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 10,
   },
-  confirmButton: {
-    marginTop: 2,
+  keyboardView: {
+    flex: 1,
+  },
+  kicker: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  modalBox: {
+    alignItems: "center",
+    borderRadius: 26,
+    borderWidth: 1,
+    maxWidth: 400,
+    padding: 24,
+    width: "100%",
+  },
+  modalButton: {
+    marginTop: 12,
+    width: "100%",
   },
   modalContainer: {
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
     padding: 20,
-  },
-  modalBox: {
-    alignItems: "center",
-    borderRadius: 26,
-    borderWidth: 1,
-    maxWidth: 380,
-    padding: 24,
-    width: "100%",
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    marginTop: 12,
-    textAlign: "center",
   },
   modalText: {
     fontSize: 15,
@@ -814,22 +1407,225 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
   },
-  modalButton: {
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "900",
     marginTop: 12,
-    width: "100%",
+    textAlign: "center",
+  },
+  numberField: {
+    width: 106,
+  },
+  paymentDetail: {
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 15,
+    textAlign: "center",
+  },
+  paymentOption: {
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 7,
+    minHeight: 98,
+    minWidth: 96,
+    padding: 12,
+  },
+  paymentOptions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  paymentText: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  produto: {
+    alignItems: "center",
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+    padding: 10,
+  },
+  productCategory: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  productPrice: {
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 7,
+  },
+  profileWarning: {
+    alignItems: "center",
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+    padding: 12,
+  },
+  profileWarningText: {
+    flex: 1,
+  },
+  reviewBlock: {
+    gap: 4,
+    marginTop: 3,
   },
   reviewBox: {
     alignSelf: "stretch",
     borderRadius: 18,
     borderWidth: 1,
-    gap: 8,
+    gap: 10,
     marginBottom: 4,
     marginTop: 8,
     padding: 14,
   },
-  reviewLine: {
+  reviewLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  reviewRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  reviewValue: {
+    flex: 1,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     lineHeight: 21,
+    textAlign: "right",
+  },
+  rowFields: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  section: {
+    borderRadius: 24,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 16,
+  },
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionHint: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  sectionMeta: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  sectionTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  secureBadge: {
+    alignItems: "center",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  secureText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  shopButton: {
+    alignSelf: "stretch",
+  },
+  stateField: {
+    width: 86,
+  },
+  stepLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  stepNumber: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: "center",
+    width: 30,
+  },
+  stepNumberText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  subtitulo: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  summaryCard: {
+    alignItems: "center",
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 14,
+    justifyContent: "space-between",
+    marginBottom: 16,
+    padding: 16,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  summaryPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  summaryPillText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  summaryTotal: {
+    fontSize: 28,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  titulo: {
+    fontSize: 32,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    lineHeight: 36,
+    marginBottom: 8,
+  },
+  warningButton: {
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  warningButtonText: {
+    fontSize: 13,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: "900",
   },
 });

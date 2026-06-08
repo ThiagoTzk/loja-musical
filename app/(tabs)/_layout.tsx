@@ -1,3 +1,4 @@
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
@@ -6,6 +7,7 @@ import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
+  const { t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const insets = useSafeAreaInsets();
 
@@ -38,8 +40,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          tabBarAccessibilityLabel: "Início",
-          title: "Início",
+          tabBarAccessibilityLabel: t("tabs.home"),
+          title: t("tabs.home"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               accessibilityElementsHidden
@@ -55,8 +57,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="busca"
         options={{
-          tabBarAccessibilityLabel: "Busca",
-          title: "Busca",
+          tabBarAccessibilityLabel: t("tabs.search"),
+          title: t("tabs.search"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               accessibilityElementsHidden
@@ -72,8 +74,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="carrinho"
         options={{
-          tabBarAccessibilityLabel: "Carrinho",
-          title: "Carrinho",
+          tabBarAccessibilityLabel: t("tabs.cart"),
+          title: t("tabs.cart"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               accessibilityElementsHidden
@@ -89,8 +91,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="perfil"
         options={{
-          tabBarAccessibilityLabel: "Perfil",
-          title: "Perfil",
+          tabBarAccessibilityLabel: t("tabs.profile"),
+          title: t("tabs.profile"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               accessibilityElementsHidden

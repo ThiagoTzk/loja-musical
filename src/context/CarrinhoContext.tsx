@@ -20,8 +20,7 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
   }
 
   function removerProduto(index: number) {
-    const novo = carrinho.filter((_, i) => i !== index);
-    setCarrinho(novo);
+    setCarrinho((atual) => atual.filter((_, i) => i !== index));
   }
 
   function limparCarrinho() {

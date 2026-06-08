@@ -1,6 +1,7 @@
 import { AccessibleButton } from "@/components/accessible-button";
 import { FocusablePressable } from "@/components/focusable-pressable";
 import { CarrinhoContext } from "@/src/context/CarrinhoContext";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ProdutosContext } from "@/src/context/ProdutosContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Produto() {
   const { id } = useLocalSearchParams();
+  const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { adicionarProduto } = useContext(CarrinhoContext);
   const { produtos } = useContext(ProdutosContext);
@@ -26,16 +28,12 @@ export default function Produto() {
   if (!produto) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
-        <Text accessibilityRole="header" style={[styles.nome, { color: colors.text }]}> 
-          Produto não encontrado
-        </Text>
+        <Text accessibilityRole="header" style={[styles.nome, { color: colors.text }]}>{t("product.notFound")}</Text>
         <AccessibleButton
-          accessibilityHint="Volta para a tela anterior."
+          accessibilityHint={t("auth.backHint")}
           onPress={() => router.back()}
           variant="secondary"
-        >
-          Voltar
-        </AccessibleButton>
+        >{t("common.back")}</AccessibleButton>
       </SafeAreaView>
     );
   }
@@ -51,8 +49,8 @@ export default function Produto() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <FocusablePressable
-          accessibilityHint="Retorna para a tela anterior."
-          accessibilityLabel="Voltar"
+          accessibilityHint={t("product.backHint")}
+          accessibilityLabel={t("common.back")}
           accessibilityRole="button"
           hitSlop={8}
           onPress={() => router.back()}
@@ -72,7 +70,7 @@ export default function Produto() {
             size={18}
             color={colors.text}
           />
-          <Text style={[styles.backText, { color: colors.text }]}>Voltar</Text>
+          <Text style={[styles.backText, { color: colors.text }]}>{t("common.back")}</Text>
         </FocusablePressable>
 
         <View
@@ -91,7 +89,7 @@ export default function Produto() {
             style={[styles.imageHalo, { backgroundColor: colors.accent }]}
           />
           <Image
-            accessibilityLabel={`Imagem do produto ${produto.nome}`}
+            accessibilityLabel={language === "en" ? `Product image ${produto.nome}` : `Imagem do produto ${produto.nome}`}
             accessibilityRole="image"
             source={produto.imagem}
             style={styles.image}
@@ -118,22 +116,18 @@ export default function Produto() {
             ]}
           >
             <View>
-              <Text style={[styles.priceLabel, { color: colors.mutedText }]}>Preço</Text>
+              <Text style={[styles.priceLabel, { color: colors.mutedText }]}>{t("common.price")}</Text>
               <Text style={[styles.preco, { color: colors.text }]}>{produto.preco}</Text>
             </View>
-            <Text style={[styles.installment, { color: colors.secondaryText }]}> 
-              10x sem juros no cartão
-            </Text>
+            <Text style={[styles.installment, { color: colors.secondaryText }]}>{t("home.installments")}</Text>
           </View>
 
           <AccessibleButton
-            accessibilityHint={`Adiciona ${produto.nome} ao carrinho e abre o carrinho.`}
-            accessibilityLabel={`Adicionar ${produto.nome} ao carrinho`}
+            accessibilityHint={language === "en" ? `Adds ${produto.nome} to the cart and opens the cart.` : `Adiciona ${produto.nome} ao carrinho e abre o carrinho.`}
+            accessibilityLabel={language === "en" ? `Add ${produto.nome} to cart` : `Adicionar ${produto.nome} ao carrinho`}
             onPress={adicionarCarrinho}
             style={styles.botaoCarrinho}
-          >
-            Adicionar ao carrinho
-          </AccessibleButton>
+          >{t("product.addToCart")}</AccessibleButton>
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -1,4 +1,9 @@
 import { FirebaseAuthUser, firebaseConfig } from "@/src/config/firebase-config";
+import type {
+  CartaoPadrao,
+  DadosPerfilUsuario,
+  EnderecoPadrao,
+} from "@/src/context/UsuarioContext";
 import {
   Produto,
   resolverImagemProduto,
@@ -94,7 +99,7 @@ function firestoreBaseUrl() {
   if (!firebaseConfig.projectId) {
     throw criarErroFirestore(
       "firestore/missing-project-id",
-      "EXPO_PUBLIC_FIREBASE_PROJECT_ID nao foi encontrado no .env."
+      "EXPO_PUBLIC_FIREBASE_PROJECT_ID não foi encontrado no .env."
     );
   }
 
@@ -289,6 +294,82 @@ function mapFields(valor: FirestoreValue | undefined) {
   return valor?.mapValue?.fields;
 }
 
+function cartaoPadraoDoFields(fields: FirestoreFields | undefined): CartaoPadrao | null {
+  const cartaoFields = mapFields(fields?.cartaoPadrao);
+
+  if (!cartaoFields) return null;
+
+  const apelido = stringField(cartaoFields, "apelido") ?? "";
+  const bandeira = stringField(cartaoFields, "bandeira") ?? "Cart?o";
+  const titular = stringField(cartaoFields, "titular") ?? "";
+  const ultimos4 = stringField(cartaoFields, "ultimos4") ?? "";
+  const validade = stringField(cartaoFields, "validade") ?? "";
+
+  if (!apelido && !titular && !ultimos4 && !validade) return null;
+
+  return {
+    apelido,
+    bandeira,
+    titular,
+    ultimos4,
+    validade,
+  };
+}
+
+function enderecoVazio(): EnderecoPadrao {
+  return {
+    bairro: "",
+    cep: "",
+    cidade: "",
+    complemento: "",
+    estado: "",
+    numero: "",
+    rua: "",
+  };
+}
+
+function enderecoPadraoDoFields(fields: FirestoreFields | undefined): EnderecoPadrao | null {
+  const enderecoString = stringField(fields, "enderecoPadrao");
+
+  if (enderecoString) {
+    return {
+      ...enderecoVazio(),
+      rua: enderecoString,
+    };
+  }
+
+  const enderecoFields = mapFields(fields?.enderecoPadrao);
+
+  if (!enderecoFields) return null;
+
+  const endereco = {
+    bairro: stringField(enderecoFields, "bairro") ?? "",
+    cep: stringField(enderecoFields, "cep") ?? "",
+    cidade: stringField(enderecoFields, "cidade") ?? "",
+    complemento: stringField(enderecoFields, "complemento") ?? "",
+    estado: stringField(enderecoFields, "estado") ?? "",
+    numero: stringField(enderecoFields, "numero") ?? "",
+    rua: stringField(enderecoFields, "rua") ?? "",
+  };
+  const temValor = Object.values(endereco).some((valor) => valor.trim() !== "");
+
+  return temValor ? endereco : null;
+}
+
+function dadosPerfilDoDocumento(documento: FirestoreDocument): DadosPerfilUsuario {
+  const fields = documento.fields;
+
+  return {
+    cartaoPadrao: cartaoPadraoDoFields(fields),
+    cpf: stringField(fields, "cpf") ?? "",
+    dataNascimento: stringField(fields, "dataNascimento") ?? "",
+    enderecoPadrao: enderecoPadraoDoFields(fields),
+    nome: stringField(fields, "nome") ?? "",
+    perfilCompleto: booleanField(fields, "perfilCompleto") ?? false,
+    telefone: stringField(fields, "telefone") ?? "",
+  };
+}
+
 function produtoDoDocumento(
   documento: FirestoreDocument
 ): Produto & { ativo: boolean; ordem: number } {
@@ -333,12 +414,19 @@ export async function salvarUsuarioFirestore(usuario: FirebaseAuthUser) {
 
   return chamarFirestore(`usuarios/${usuario.localId}`, {
     body: {
+      atualizadoEm: agora,
+      cartaoPadrao: null,
+      cpf: "",
       criadoEm: agora,
+      dataNascimento: "",
       email: usuario.email,
+      enderecoPadrao: null,
       fotoPerfil: null,
+      nome: "",
+      perfilCompleto: false,
+      telefone: "",
       uid: usuario.localId,
       ultimoLoginEm: agora,
-      atualizadoEm: agora,
     },
     idToken: usuario.idToken,
     method: "PATCH",
@@ -361,11 +449,77 @@ export async function atualizarLoginUsuarioFirestore(usuario: FirebaseAuthUser) 
   });
 }
 
+export async function obterDadosUsuarioFirestore(usuario: UsuarioFirestore) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+  const dados = await chamarFirestore<FirestoreDocument>(
+    `usuarios/${usuarioAutenticado.uid}`,
+    {
+      idToken: usuarioAutenticado.idToken,
+      method: "GET",
+    }
+  );
+
+  return dadosPerfilDoDocumento(dados);
+}
+
+export async function atualizarDadosPerfilUsuarioFirestore(
+  usuario: UsuarioFirestore,
+  dados: DadosPerfilUsuario
+) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+  const perfilCompleto = Boolean(
+    dados.nome?.trim() ||
+      dados.telefone?.trim() ||
+      dados.cpf?.trim() ||
+      dados.dataNascimento?.trim() ||
+      dados.enderecoPadrao ||
+      dados.cartaoPadrao
+  );
+  const body: Record<string, unknown> = {
+    atualizadoEm: new Date(),
+    cpf: dados.cpf ?? "",
+    dataNascimento: dados.dataNascimento ?? "",
+    enderecoPadrao: dados.enderecoPadrao ?? null,
+    nome: dados.nome ?? "",
+    perfilCompleto,
+    telefone: dados.telefone ?? "",
+  };
+  const updateMask = [
+    "atualizadoEm",
+    "cpf",
+    "dataNascimento",
+    "enderecoPadrao",
+    "nome",
+    "perfilCompleto",
+    "telefone",
+  ];
+
+  if (dados.cartaoPadrao !== undefined) {
+    body.cartaoPadrao = dados.cartaoPadrao;
+    updateMask.push("cartaoPadrao");
+  }
+
+  await chamarFirestore<FirestoreDocument>(
+    `usuarios/${usuarioAutenticado.uid}`,
+    {
+      body,
+      idToken: usuarioAutenticado.idToken,
+      method: "PATCH",
+      updateMask,
+    }
+  );
+
+  return {
+    ...dados,
+    perfilCompleto,
+  };
+}
+
 function garantirUsuarioAutenticado(usuario: UsuarioFirestore) {
   if (!usuario.uid || !usuario.idToken) {
     throw criarErroFirestore(
       "firestore/unauthenticated",
-      "Usuario autenticado nao encontrado para acessar pedidos."
+      "Usuário autenticado não encontrado para acessar pedidos."
     );
   }
 

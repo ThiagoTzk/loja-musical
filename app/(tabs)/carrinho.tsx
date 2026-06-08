@@ -1,6 +1,7 @@
 import { AccessibleButton } from "@/components/accessible-button";
 import { FocusablePressable } from "@/components/focusable-pressable";
 import { CarrinhoContext } from "@/src/context/CarrinhoContext";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { UsuarioContext } from "@/src/context/UsuarioContext";
 import { formatarMoeda, precoParaNumero } from "@/src/utils/preco";
@@ -16,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Carrinho() {
+  const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { carrinho, removerProduto } = useContext(CarrinhoContext);
   const { usuario } = useContext(UsuarioContext);
@@ -37,13 +39,9 @@ export default function Carrinho() {
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}> 
-          Carrinho
-        </Text>
+        <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}>{t("cart.title")}</Text>
 
-        <Text style={[styles.subtitulo, { color: colors.secondaryText }]}> 
-          Revise os itens antes de seguir para o pagamento.
-        </Text>
+        <Text style={[styles.subtitulo, { color: colors.secondaryText }]}>{t("cart.subtitle")}</Text>
 
         {carrinho.length === 0 && (
           <View
@@ -53,17 +51,13 @@ export default function Carrinho() {
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Carrinho vazio</Text>
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}> 
-              Explore a loja e adicione seus instrumentos ou álbuns favoritos.
-            </Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t("cart.emptyTitle")}</Text>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>{t("cart.emptyText")}</Text>
             <AccessibleButton
-              accessibilityHint="Volta para a lista de produtos."
+              accessibilityHint={t("cart.viewProductsHint")}
               onPress={() => router.push("/(tabs)")}
               style={styles.emptyButton}
-            >
-              Ver produtos
-            </AccessibleButton>
+            >{t("common.viewProducts")}</AccessibleButton>
           </View>
         )}
 
@@ -80,7 +74,7 @@ export default function Carrinho() {
             ]}
           >
             <Image
-              accessibilityLabel={`Imagem do produto ${item.nome}`}
+              accessibilityLabel={language === "en" ? `Product image ${item.nome}` : `Imagem do produto ${item.nome}`}
               accessibilityRole="image"
               source={item.imagem}
               style={[styles.imagem, { backgroundColor: colors.backgroundSoft }]}
@@ -95,8 +89,8 @@ export default function Carrinho() {
             </View>
 
             <FocusablePressable
-              accessibilityHint="Remove este produto do carrinho."
-              accessibilityLabel={`Remover ${item.nome} do carrinho`}
+              accessibilityHint={t("cart.removeHint")}
+              accessibilityLabel={language === "en" ? `Remove ${item.nome} from cart` : `Remover ${item.nome} do carrinho`}
               accessibilityRole="button"
               hitSlop={8}
               onPress={() => removerProduto(index)}
@@ -109,7 +103,7 @@ export default function Carrinho() {
                 },
               ]}
             >
-              <Text style={[styles.removeText, { color: colors.danger }]}>Remover</Text>
+              <Text style={[styles.removeText, { color: colors.danger }]}>{t("common.remove")}</Text>
             </FocusablePressable>
           </View>
         ))}
@@ -123,7 +117,7 @@ export default function Carrinho() {
           >
             <View style={styles.summaryRow}>
               <View>
-                <Text style={[styles.totalLabel, { color: colors.secondaryText }]}>Total</Text>
+                <Text style={[styles.totalLabel, { color: colors.secondaryText }]}>{t("common.total")}</Text>
                 <Text
                   accessibilityLiveRegion="polite"
                   style={[styles.total, { color: colors.text }]}
@@ -132,22 +126,18 @@ export default function Carrinho() {
                 </Text>
               </View>
 
-              <Text style={[styles.summaryHint, { color: colors.secondaryText }]}>
-                Próximo passo: pagamento seguro.
-              </Text>
+              <Text style={[styles.summaryHint, { color: colors.secondaryText }]}>{t("cart.summaryHint")}</Text>
             </View>
 
             <AccessibleButton
               accessibilityHint={
                 usuario
-                  ? "Abre a tela de pagamento."
-                  : "Abre a tela de login antes do pagamento."
+                  ? t("cart.checkoutHintLogged")
+                  : t("cart.checkoutHintGuest")
               }
               onPress={finalizarCompra}
               style={styles.checkoutButton}
-            >
-              Finalizar compra
-            </AccessibleButton>
+            >{t("cart.checkout")}</AccessibleButton>
           </View>
         )}
       </ScrollView>

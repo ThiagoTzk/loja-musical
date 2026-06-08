@@ -13,7 +13,35 @@ type DadosCompra = {
   parcelas?: string;
 };
 
-type Usuario = {
+export type EnderecoPadrao = {
+  bairro: string;
+  cep: string;
+  cidade: string;
+  complemento: string;
+  estado: string;
+  numero: string;
+  rua: string;
+};
+
+export type CartaoPadrao = {
+  apelido: string;
+  bandeira: string;
+  titular: string;
+  ultimos4: string;
+  validade: string;
+};
+
+export type DadosPerfilUsuario = {
+  cartaoPadrao?: CartaoPadrao | null;
+  cpf?: string;
+  dataNascimento?: string;
+  enderecoPadrao?: EnderecoPadrao | null;
+  nome?: string;
+  perfilCompleto?: boolean;
+  telefone?: string;
+};
+
+export type Usuario = DadosPerfilUsuario & {
   email: string;
   fotoPerfil: string | null;
   historico: ItemHistoricoCompra[];
@@ -22,17 +50,12 @@ type Usuario = {
   uid?: string;
 };
 
-type UsuarioSalvo = Usuario & {
-  senha: string;
-};
-
 type UsuarioContextType = {
   usuario: Usuario | null;
-  login: (email: string, senha: string) => true | string;
-  cadastrar: (email: string, senha: string) => true | string;
   sincronizarUsuario: (dados: string | Partial<Usuario>) => void;
   logout: () => void;
   adicionarHistorico: (produtos: Produto[], dadosCompra: DadosCompra) => void;
+  atualizarDadosPerfil: (dados: DadosPerfilUsuario) => void;
   atualizarFotoPerfil: (fotoPerfil: string) => void;
 };
 
@@ -40,91 +63,79 @@ export const UsuarioContext = createContext<UsuarioContextType>(
   {} as UsuarioContextType
 );
 
+const enderecoVazio: EnderecoPadrao = {
+  bairro: "",
+  cep: "",
+  cidade: "",
+  complemento: "",
+  estado: "",
+  numero: "",
+  rua: "",
+};
+
+function normalizarEndereco(endereco?: EnderecoPadrao | string | null) {
+  if (!endereco) return null;
+
+  if (typeof endereco === "string") {
+    const texto = endereco.trim();
+
+    return texto ? { ...enderecoVazio, rua: texto } : null;
+  }
+
+  const normalizado = {
+    ...enderecoVazio,
+    ...endereco,
+  };
+  const temValor = Object.values(normalizado).some((valor) => valor.trim() !== "");
+
+  return temValor ? normalizado : null;
+}
+
+export function formatarEndereco(endereco?: EnderecoPadrao | null) {
+  if (!endereco) return "";
+
+  return [
+    [endereco.rua, endereco.numero].filter(Boolean).join(", "),
+    endereco.complemento,
+    endereco.bairro,
+    [endereco.cidade, endereco.estado].filter(Boolean).join(" - "),
+    endereco.cep ? `CEP ${endereco.cep}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
 export function UsuarioProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
-  const [usuarios, setUsuarios] = useState<UsuarioSalvo[]>([
-    {
-      email: "thiago@thiago.com",
-      fotoPerfil: null,
-      senha: "thiago1234!",
-      historico: [] as ItemHistoricoCompra[],
-    },
-  ]);
-
-  function login(email: string, senha: string): true | string {
-    const user = usuarios.find((u) => u.email === email);
-
-    if (!user) return "Email nao existente";
-
-    if (user.senha !== senha) return "Senha incorreta";
-
-    setUsuario({
-      email: user.email,
-      fotoPerfil: user.fotoPerfil,
-      historico: user.historico,
-    });
-
-    return true;
-  }
-
-  function cadastrar(email: string, senha: string): true | string {
-    const existe = usuarios.find((u) => u.email === email);
-
-    if (existe) return "Email ja cadastrado";
-
-    const novoUsuario = {
-      email,
-      fotoPerfil: null,
-      senha,
-      historico: [] as ItemHistoricoCompra[],
-    };
-
-    setUsuarios([...usuarios, novoUsuario]);
-
-    setUsuario({
-      email,
-      fotoPerfil: null,
-      historico: [],
-    });
-
-    return true;
-  }
-
   function sincronizarUsuario(dados: string | Partial<Usuario>) {
     const email = typeof dados === "string" ? dados : dados.email ?? "";
+
+    if (!email) return;
+
     const dadosUsuario = typeof dados === "string" ? {} : dados;
-    const user = usuarios.find((u) => u.email === email);
 
-    if (user) {
-      setUsuario({
-        email: user.email,
-        fotoPerfil: user.fotoPerfil,
-        historico: user.historico,
-        idToken: dadosUsuario.idToken,
-        refreshToken: dadosUsuario.refreshToken,
-        uid: dadosUsuario.uid,
-      });
-      return;
-    }
-
-    const novoUsuario = {
+    setUsuario((usuarioAtual) => ({
+      cartaoPadrao:
+        "cartaoPadrao" in dadosUsuario
+          ? dadosUsuario.cartaoPadrao ?? null
+          : usuarioAtual?.cartaoPadrao ?? null,
+      cpf: dadosUsuario.cpf ?? usuarioAtual?.cpf ?? "",
+      dataNascimento: dadosUsuario.dataNascimento ?? usuarioAtual?.dataNascimento ?? "",
       email,
-      fotoPerfil: null,
-      senha: "",
-      historico: [] as ItemHistoricoCompra[],
-    };
-
-    setUsuarios([...usuarios, novoUsuario]);
-
-    setUsuario({
-      email,
-      fotoPerfil: null,
-      historico: [],
+      enderecoPadrao:
+        "enderecoPadrao" in dadosUsuario
+          ? normalizarEndereco(dadosUsuario.enderecoPadrao)
+          : usuarioAtual?.enderecoPadrao ?? null,
+      fotoPerfil: dadosUsuario.fotoPerfil ?? usuarioAtual?.fotoPerfil ?? null,
+      historico: dadosUsuario.historico ?? usuarioAtual?.historico ?? [],
       idToken: dadosUsuario.idToken,
+      nome: dadosUsuario.nome ?? usuarioAtual?.nome ?? "",
+      perfilCompleto: dadosUsuario.perfilCompleto ?? usuarioAtual?.perfilCompleto ?? false,
       refreshToken: dadosUsuario.refreshToken,
+      telefone: dadosUsuario.telefone ?? usuarioAtual?.telefone ?? "",
       uid: dadosUsuario.uid,
-    });
+    }));
   }
 
   function logout() {
@@ -141,18 +152,11 @@ export function UsuarioProvider({ children }: { children: ReactNode }) {
       formaPagamento: dadosCompra.formaPagamento,
       parcelas: dadosCompra.parcelas,
     }));
-    const historico = [...itensComprados, ...usuario.historico];
 
     setUsuario({
       ...usuario,
-      historico,
+      historico: [...itensComprados, ...usuario.historico],
     });
-
-    setUsuarios((usuariosAtuais) =>
-      usuariosAtuais.map((user) =>
-        user.email === usuario.email ? { ...user, historico } : user
-      )
-    );
   }
 
   function atualizarFotoPerfil(fotoPerfil: string) {
@@ -162,23 +166,29 @@ export function UsuarioProvider({ children }: { children: ReactNode }) {
       ...usuario,
       fotoPerfil,
     });
+  }
 
-    setUsuarios((usuariosAtuais) =>
-      usuariosAtuais.map((user) =>
-        user.email === usuario.email ? { ...user, fotoPerfil } : user
-      )
-    );
+  function atualizarDadosPerfil(dados: DadosPerfilUsuario) {
+    if (!usuario) return;
+
+    setUsuario({
+      ...usuario,
+      ...dados,
+      enderecoPadrao:
+        "enderecoPadrao" in dados
+          ? normalizarEndereco(dados.enderecoPadrao)
+          : usuario.enderecoPadrao ?? null,
+    });
   }
 
   return (
     <UsuarioContext.Provider
       value={{
         usuario,
-        login,
-        cadastrar,
         sincronizarUsuario,
         logout,
         adicionarHistorico,
+        atualizarDadosPerfil,
         atualizarFotoPerfil,
       }}
     >

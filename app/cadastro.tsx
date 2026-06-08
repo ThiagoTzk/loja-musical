@@ -1,6 +1,9 @@
 import { AccessibleButton } from "@/components/accessible-button";
+import { BrandLogo } from "@/components/brand-logo";
 import { FocusablePressable } from "@/components/focusable-pressable";
+import { LanguageToggle } from "@/components/language-toggle";
 import { cadastrarUsuarioFirebase } from "@/src/config/firebase-config";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { UsuarioContext } from "@/src/context/UsuarioContext";
 import { salvarUsuarioFirestore } from "@/src/services/firestore";
@@ -18,6 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Cadastro() {
+  const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { sincronizarUsuario } = useContext(UsuarioContext);
 
@@ -35,15 +39,15 @@ export default function Cadastro() {
     const emailLimpo = email.trim();
 
     if (!emailLimpo) {
-      erros.push("Informe um email.");
+      erros.push(t("auth.emailRequiredSignup"));
     } else if (!emailValido(emailLimpo)) {
-      erros.push("Digite um email no formato exemplo@exemplo.com.");
+      erros.push(t("auth.emailInvalid"));
     }
 
     if (!senha) {
-      erros.push("Informe uma senha.");
+      erros.push(t("auth.passwordRequiredSignup"));
     } else if (senha.length < 6) {
-      erros.push("Senha precisa ter pelo menos 6 caracteres.");
+      erros.push(t("auth.passwordWeak"));
     }
 
     return erros.length > 0 ? erros.join("\n") : null;
@@ -84,12 +88,13 @@ export default function Cadastro() {
       sincronizarUsuario({
         email: credencial.email ?? emailLimpo,
         idToken: credencial.idToken,
+        perfilCompleto: false,
         refreshToken: credencial.refreshToken,
         uid: credencial.localId,
       });
       router.replace("/(tabs)/perfil");
     } catch (error) {
-      setErro(descreverErroFirebaseAuth(error, "cadastro"));
+      setErro(descreverErroFirebaseAuth(error, "cadastro", language));
     } finally {
       setCarregando(false);
     }
@@ -112,8 +117,8 @@ export default function Cadastro() {
           ]}
         >
           <FocusablePressable
-            accessibilityHint="Volta para a tela anterior."
-            accessibilityLabel="Voltar"
+            accessibilityHint={t("auth.backHint")}
+            accessibilityLabel={t("common.back")}
             accessibilityRole="button"
             disabled={carregando}
             hitSlop={8}
@@ -123,27 +128,30 @@ export default function Cadastro() {
               { opacity: carregando ? 0.5 : pressed ? 0.72 : 1 },
             ]}
           >
-            <Text style={[styles.backText, { color: colors.text }]}>Voltar</Text>
+            <Text style={[styles.backText, { color: colors.text }]}>{t("common.back")}</Text>
           </FocusablePressable>
 
+          <BrandLogo />
+          <LanguageToggle compact style={styles.languageToggle} />
+
           <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}>
-            Criar conta
+            {t("auth.signupTitle")}
           </Text>
           <Text style={[styles.subtitulo, { color: colors.secondaryText }]}>
-            Use um email valido e uma senha com pelo menos 6 caracteres.
+            {t("auth.signupSubtitle")}
           </Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            <Text style={[styles.label, { color: colors.text }]}>{t("auth.email")}</Text>
             <TextInput
-              accessibilityHint="Digite seu email para cadastro."
-              accessibilityLabel="Email para cadastro"
+              accessibilityHint={t("auth.emailSignupHint")}
+              accessibilityLabel={t("auth.emailSignupLabel")}
               autoCapitalize="none"
               autoComplete="email"
               editable={!carregando}
               keyboardType="email-address"
               onChangeText={setEmail}
-              placeholder="seuemail@exemplo.com"
+              placeholder={t("auth.emailPlaceholder")}
               placeholderTextColor={colors.mutedText}
               returnKeyType="next"
               style={[
@@ -160,18 +168,18 @@ export default function Cadastro() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>Senha</Text>
+            <Text style={[styles.label, { color: colors.text }]}>{t("auth.password")}</Text>
             <Text style={[styles.helper, { color: colors.secondaryText }]}>
-              Minimo de 6 caracteres.
+              {t("auth.passwordHelper")}
             </Text>
             <TextInput
-              accessibilityHint="Digite uma senha com no minimo 6 caracteres."
-              accessibilityLabel="Senha para cadastro"
+              accessibilityHint={t("auth.passwordSignupHint")}
+              accessibilityLabel={t("auth.passwordSignupLabel")}
               autoComplete="new-password"
               editable={!carregando}
               onChangeText={setSenha}
               onSubmitEditing={criarConta}
-              placeholder="Crie uma senha segura"
+              placeholder={t("auth.signupPasswordPlaceholder")}
               placeholderTextColor={colors.mutedText}
               returnKeyType="done"
               secureTextEntry
@@ -201,16 +209,16 @@ export default function Cadastro() {
           )}
 
           <AccessibleButton
-            accessibilityHint="Cria sua conta e abre o perfil."
+            accessibilityHint={t("auth.createAccountAndProfileHint")}
             disabled={carregando}
             onPress={criarConta}
           >
-            {carregando ? "Criando conta..." : "Criar conta"}
+            {carregando ? t("auth.creatingAccount") : t("auth.createAccount")}
           </AccessibleButton>
 
           <FocusablePressable
-            accessibilityHint="Abre a tela de login."
-            accessibilityLabel="Ja tenho conta"
+            accessibilityHint={t("profile.loginHint")}
+            accessibilityLabel={t("auth.haveAccount")}
             accessibilityRole="button"
             disabled={carregando}
             hitSlop={8}
@@ -220,7 +228,7 @@ export default function Cadastro() {
               { opacity: carregando ? 0.5 : pressed ? 0.72 : 1 },
             ]}
           >
-            <Text style={[styles.linkText, { color: colors.text }]}>Ja tenho conta</Text>
+            <Text style={[styles.linkText, { color: colors.text }]}>{t("auth.haveAccount")}</Text>
           </FocusablePressable>
         </View>
       </KeyboardAvoidingView>
@@ -302,6 +310,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 14,
     minHeight: 48,
+  },
+  languageToggle: {
+    alignSelf: "center",
+    marginBottom: 18,
   },
   linkText: {
     fontSize: 16,

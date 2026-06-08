@@ -1,9 +1,15 @@
 import { AccessibleButton } from "@/components/accessible-button";
+import { BrandLogo } from "@/components/brand-logo";
 import { FocusablePressable } from "@/components/focusable-pressable";
+import { LanguageToggle } from "@/components/language-toggle";
 import { entrarUsuarioFirebase } from "@/src/config/firebase-config";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { UsuarioContext } from "@/src/context/UsuarioContext";
-import { atualizarLoginUsuarioFirestore } from "@/src/services/firestore";
+import {
+  atualizarLoginUsuarioFirestore,
+  obterDadosUsuarioFirestore,
+} from "@/src/services/firestore";
 import { descreverErroFirebaseAuth } from "@/src/utils/firebase-auth-errors";
 import { router } from "expo-router";
 import { useContext, useState } from "react";
@@ -18,6 +24,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Login() {
+  const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { sincronizarUsuario } = useContext(UsuarioContext);
 
@@ -35,13 +42,13 @@ export default function Login() {
     const emailLimpo = email.trim();
 
     if (!emailLimpo) {
-      erros.push("Informe seu email.");
+      erros.push(t("auth.emailRequired"));
     } else if (!emailValido(emailLimpo)) {
-      erros.push("Digite um email no formato exemplo@exemplo.com.");
+      erros.push(t("auth.emailInvalid"));
     }
 
     if (!senha) {
-      erros.push("Informe sua senha.");
+      erros.push(t("auth.passwordRequired"));
     }
 
     return erros.length > 0 ? erros.join("\n") : null;
@@ -73,14 +80,21 @@ export default function Login() {
 
     try {
       const credencial = await entrarUsuarioFirebase(emailLimpo, senha);
+      let dadosPerfil = {};
 
       try {
         await atualizarLoginUsuarioFirestore(credencial);
+        dadosPerfil = await obterDadosUsuarioFirestore({
+          email: credencial.email ?? emailLimpo,
+          idToken: credencial.idToken,
+          uid: credencial.localId,
+        });
       } catch (syncError) {
         console.warn("Nao foi possivel atualizar o usuario no Firestore.", syncError);
       }
 
       sincronizarUsuario({
+        ...dadosPerfil,
         email: credencial.email ?? emailLimpo,
         idToken: credencial.idToken,
         refreshToken: credencial.refreshToken,
@@ -88,7 +102,7 @@ export default function Login() {
       });
       router.replace("/(tabs)/perfil");
     } catch (error) {
-      setErro(descreverErroFirebaseAuth(error, "login"));
+      setErro(descreverErroFirebaseAuth(error, "login", language));
     } finally {
       setCarregando(false);
     }
@@ -111,8 +125,8 @@ export default function Login() {
           ]}
         >
           <FocusablePressable
-            accessibilityHint="Volta para a tela anterior."
-            accessibilityLabel="Voltar"
+            accessibilityHint={t("auth.backHint")}
+            accessibilityLabel={t("common.back")}
             accessibilityRole="button"
             disabled={carregando}
             hitSlop={8}
@@ -122,27 +136,30 @@ export default function Login() {
               { opacity: carregando ? 0.5 : pressed ? 0.72 : 1 },
             ]}
           >
-            <Text style={[styles.backText, { color: colors.text }]}>Voltar</Text>
+            <Text style={[styles.backText, { color: colors.text }]}>{t("common.back")}</Text>
           </FocusablePressable>
 
+          <BrandLogo />
+          <LanguageToggle compact style={styles.languageToggle} />
+
           <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}>
-            Entrar na BlackTone
+            {t("auth.loginTitle")}
           </Text>
           <Text style={[styles.subtitulo, { color: colors.secondaryText }]}>
-            Acesse sua conta para concluir compras e acompanhar o historico.
+            {t("auth.loginSubtitle")}
           </Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            <Text style={[styles.label, { color: colors.text }]}>{t("auth.email")}</Text>
             <TextInput
-              accessibilityHint="Digite seu email cadastrado."
-              accessibilityLabel="Email"
+              accessibilityHint={t("auth.emailHint")}
+              accessibilityLabel={t("auth.email")}
               autoCapitalize="none"
               autoComplete="email"
               editable={!carregando}
               keyboardType="email-address"
               onChangeText={setEmail}
-              placeholder="seuemail@exemplo.com"
+              placeholder={t("auth.emailPlaceholder")}
               placeholderTextColor={colors.mutedText}
               returnKeyType="next"
               style={[
@@ -159,15 +176,15 @@ export default function Login() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>Senha</Text>
+            <Text style={[styles.label, { color: colors.text }]}>{t("auth.password")}</Text>
             <TextInput
-              accessibilityHint="Digite sua senha."
-              accessibilityLabel="Senha"
+              accessibilityHint={t("auth.passwordHint")}
+              accessibilityLabel={t("auth.password")}
               autoComplete="password"
               editable={!carregando}
               onChangeText={setSenha}
               onSubmitEditing={entrar}
-              placeholder="Sua senha"
+              placeholder={t("auth.passwordPlaceholder")}
               placeholderTextColor={colors.mutedText}
               returnKeyType="done"
               secureTextEntry
@@ -197,16 +214,16 @@ export default function Login() {
           )}
 
           <AccessibleButton
-            accessibilityHint="Entra na sua conta."
+            accessibilityHint={t("auth.loginHint")}
             disabled={carregando}
             onPress={entrar}
           >
-            {carregando ? "Entrando..." : "Entrar"}
+            {carregando ? t("auth.signingIn") : t("auth.signIn")}
           </AccessibleButton>
 
           <FocusablePressable
-            accessibilityHint="Abre a tela de cadastro."
-            accessibilityLabel="Criar conta"
+            accessibilityHint={t("auth.goToSignupHint")}
+            accessibilityLabel={t("auth.createAccount")}
             accessibilityRole="button"
             disabled={carregando}
             hitSlop={8}
@@ -216,7 +233,7 @@ export default function Login() {
               { opacity: carregando ? 0.5 : pressed ? 0.72 : 1 },
             ]}
           >
-            <Text style={[styles.linkText, { color: colors.text }]}>Criar conta</Text>
+            <Text style={[styles.linkText, { color: colors.text }]}>{t("auth.createAccount")}</Text>
           </FocusablePressable>
         </View>
       </KeyboardAvoidingView>
@@ -293,6 +310,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 14,
     minHeight: 48,
+  },
+  languageToggle: {
+    alignSelf: "center",
+    marginBottom: 18,
   },
   linkText: {
     fontSize: 16,

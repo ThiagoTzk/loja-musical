@@ -1,4 +1,5 @@
 import { FocusablePressable } from "@/components/focusable-pressable";
+import { LanguageContext } from "@/src/context/LanguageContext";
 import { ProdutosContext } from "@/src/context/ProdutosContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { Produto } from "@/src/data/produto";
@@ -8,12 +9,15 @@ import { useContext, useMemo, useState } from "react";
 import {
   FlatList,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const CATEGORIA_TODOS = "Todos";
 
 function normalizarTexto(valor: string) {
   return valor
@@ -23,32 +27,95 @@ function normalizarTexto(valor: string) {
     .trim();
 }
 
+function dividirTermos(valor: string) {
+  return normalizarTexto(valor).split(/\s+/).filter(Boolean);
+}
+
+function pontuarProduto(produto: Produto, termos: string[]) {
+  if (termos.length === 0) return 1;
+
+  const nome = normalizarTexto(produto.nome);
+  const categoria = normalizarTexto(produto.categoria);
+  const descricao = normalizarTexto(produto.descricao);
+  const preco = normalizarTexto(produto.preco);
+  const precoNumerico = String(produto.precoNumero ?? "");
+
+  return termos.reduce((pontuacao, termo) => {
+    let termoPontuacao = 0;
+
+    if (nome.startsWith(termo)) termoPontuacao += 12;
+    else if (nome.includes(termo)) termoPontuacao += 8;
+
+    if (categoria.includes(termo)) termoPontuacao += 6;
+    if (preco.includes(termo) || precoNumerico.includes(termo)) termoPontuacao += 5;
+    if (descricao.includes(termo)) termoPontuacao += 3;
+
+    return termoPontuacao === 0
+      ? Number.NEGATIVE_INFINITY
+      : pontuacao + termoPontuacao;
+  }, 0);
+}
+
 export default function Busca() {
+  const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { erro, produtos } = useContext(ProdutosContext);
   const [busca, setBusca] = useState("");
+  const [categoriaSelecionada, setCategoriaSelecionada] =
+    useState(CATEGORIA_TODOS);
+
+  const categorias = useMemo(() => {
+    const categoriasUnicas = Array.from(
+      new Set(produtos.map((produto) => produto.categoria))
+    ).sort((a, b) => a.localeCompare(b));
+
+    return [CATEGORIA_TODOS, ...categoriasUnicas];
+  }, [produtos]);
 
   const produtosFiltrados = useMemo(() => {
-    const termo = normalizarTexto(busca);
+    const termos = dividirTermos(busca);
+    const categoriaAtual = normalizarTexto(categoriaSelecionada);
 
-    if (!termo) return produtos;
+    const produtosDaCategoria =
+      categoriaSelecionada === CATEGORIA_TODOS
+        ? produtos
+        : produtos.filter(
+            (produto) => normalizarTexto(produto.categoria) === categoriaAtual
+          );
 
-    return produtos.filter((produto) => {
-      const textoPesquisavel = normalizarTexto(
-        `${produto.nome} ${produto.categoria} ${produto.descricao} ${produto.preco}`
-      );
+    if (termos.length === 0) return produtosDaCategoria;
 
-      return textoPesquisavel.includes(termo);
-    });
-  }, [busca, produtos]);
+    return produtosDaCategoria
+      .map((produto) => ({
+        pontuacao: pontuarProduto(produto, termos),
+        produto,
+      }))
+      .filter(({ pontuacao }) => Number.isFinite(pontuacao))
+      .sort((a, b) => b.pontuacao - a.pontuacao)
+      .map(({ produto }) => produto);
+  }, [busca, categoriaSelecionada, produtos]);
 
-  const buscaAtiva = busca.trim().length > 0;
+  const buscaComTexto = busca.trim().length > 0;
+  const buscaAtiva = buscaComTexto || categoriaSelecionada !== CATEGORIA_TODOS;
+
+  function limparFiltros() {
+    setBusca("");
+    setCategoriaSelecionada(CATEGORIA_TODOS);
+  }
+
+  function nomeCategoria(categoria: string) {
+    return categoria === CATEGORIA_TODOS ? t("search.all") : categoria;
+  }
 
   function renderItem({ item }: { item: Produto }) {
     return (
       <FocusablePressable
-        accessibilityHint="Abre a tela de detalhes do produto."
-        accessibilityLabel={`Abrir detalhes de ${item.nome}, ${item.categoria}, preço ${item.preco}`}
+        accessibilityHint={t("home.openProduct")}
+        accessibilityLabel={
+          language === "en"
+            ? `Open details for ${item.nome}, ${item.categoria}, price ${item.preco}`
+            : `Abrir detalhes de ${item.nome}, ${item.categoria}, pre?o ${item.preco}`
+        }
         accessibilityRole="button"
         hitSlop={6}
         onPress={() => router.push(`/produto/${item.id}`)}
@@ -62,9 +129,9 @@ export default function Busca() {
           },
         ]}
       >
-        <View style={[styles.imageShell, { backgroundColor: colors.backgroundSoft }]}> 
+        <View style={[styles.imageShell, { backgroundColor: colors.backgroundSoft }]}>
           <Image
-            accessibilityLabel={`Imagem do produto ${item.nome}`}
+            accessibilityLabel={language === "en" ? `Product image ${item.nome}` : `Imagem do produto ${item.nome}`}
             accessibilityRole="image"
             source={item.imagem}
             style={styles.imagem}
@@ -72,7 +139,7 @@ export default function Busca() {
         </View>
 
         <View style={styles.cardContent}>
-          <Text style={[styles.category, { color: colors.accentStrong }]}> 
+          <Text style={[styles.category, { color: colors.accentStrong }]}>
             {item.categoria}
           </Text>
           <Text style={[styles.productName, { color: colors.text }]}>{item.nome}</Text>
@@ -101,12 +168,11 @@ export default function Busca() {
       <FlatList
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}> 
-              Buscar produtos
+            <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}>
+              {t("search.title")}
             </Text>
-            <Text style={[styles.subtitulo, { color: colors.secondaryText }]}> 
-              Pesquise nos produtos cadastrados no Firestore por nome,
-              categoria, descricao ou preco.
+            <Text style={[styles.subtitulo, { color: colors.secondaryText }]}>
+              {t("search.subtitle")}
             </Text>
 
             {erro !== "" && (
@@ -114,12 +180,12 @@ export default function Busca() {
                 accessibilityLiveRegion="polite"
                 style={[styles.dataStatus, { color: colors.secondaryText }]}
               >
-                Usando produtos locais enquanto o Firestore e configurado.
+                {t("search.firestoreFallback")}
               </Text>
             )}
 
             <View style={styles.fieldGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Produto</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t("search.product")}</Text>
               <View
                 style={[
                   styles.searchBox,
@@ -138,23 +204,23 @@ export default function Busca() {
                 />
 
                 <TextInput
-                  accessibilityHint="Digite parte do nome, categoria, descrição ou preço do produto."
-                  accessibilityLabel="Buscar produto"
+                  accessibilityHint={t("search.inputHint")}
+                  accessibilityLabel={t("search.inputLabel")}
                   autoCapitalize="none"
                   autoCorrect={false}
                   clearButtonMode="while-editing"
                   onChangeText={setBusca}
-                  placeholder="Exemplo: guitarra, vinil, 799"
+                  placeholder={t("search.placeholder")}
                   placeholderTextColor={colors.mutedText}
                   returnKeyType="search"
                   style={[styles.input, { color: colors.text }]}
                   value={busca}
                 />
 
-                {buscaAtiva && (
+                {buscaComTexto && (
                   <FocusablePressable
-                    accessibilityHint="Limpa o texto pesquisado e exibe todos os produtos."
-                    accessibilityLabel="Limpar busca"
+                    accessibilityHint={t("search.clearTextHint")}
+                    accessibilityLabel={t("search.clearTextLabel")}
                     accessibilityRole="button"
                     hitSlop={8}
                     onPress={() => setBusca("")}
@@ -178,15 +244,65 @@ export default function Busca() {
               </View>
             </View>
 
+            <ScrollView
+              accessibilityLabel={t("search.categoryFilters")}
+              contentContainerStyle={styles.filterList}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
+              {categorias.map((categoria) => {
+                const selected = categoriaSelecionada === categoria;
+
+                return (
+                  <FocusablePressable
+                    accessibilityHint={
+                      language === "en"
+                        ? `Filters the search by ${nomeCategoria(categoria)}.`
+                        : `Filtra a busca por ${nomeCategoria(categoria)}.`
+                    }
+                    accessibilityLabel={
+                      language === "en"
+                        ? `Filter ${nomeCategoria(categoria)}`
+                        : `Filtro ${nomeCategoria(categoria)}`
+                    }
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    hitSlop={6}
+                    key={categoria}
+                    onPress={() => setCategoriaSelecionada(categoria)}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      {
+                        backgroundColor: selected ? colors.accent : colors.card,
+                        borderColor: selected ? colors.borderStrong : colors.border,
+                        opacity: pressed ? 0.82 : 1,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        { color: selected ? colors.accentText : colors.text },
+                      ]}
+                    >
+                      {nomeCategoria(categoria)}
+                    </Text>
+                  </FocusablePressable>
+                );
+              })}
+            </ScrollView>
+
             <Text
               accessibilityLiveRegion="polite"
               style={[styles.resultCount, { color: colors.mutedText }]}
             >
               {buscaAtiva
-                ? `${produtosFiltrados.length} produto${
-                    produtosFiltrados.length === 1 ? "" : "s"
-                  } encontrado${produtosFiltrados.length === 1 ? "" : "s"}`
-                : `Mostrando ${produtos.length} produtos disponiveis`}
+                ? `${produtosFiltrados.length} ${
+                    produtosFiltrados.length === 1
+                      ? t("search.foundSingular")
+                      : t("search.foundPlural")
+                  }`
+                : `${t("search.showing")} ${produtos.length} ${t("search.availableProducts")}`}
             </Text>
           </View>
         }
@@ -198,10 +314,31 @@ export default function Busca() {
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Nenhum produto encontrado</Text>
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}> 
-              Tente buscar por â€œguitarraâ€, â€œvinilâ€, â€œedição especialâ€ ou pelo preço.
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t("search.noResults")}</Text>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              {t("search.noResultsText")}
             </Text>
+            {buscaAtiva && (
+              <FocusablePressable
+                accessibilityHint={t("search.clearFiltersHint")}
+                accessibilityLabel={t("search.clearFilters")}
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={limparFiltros}
+                style={({ pressed }) => [
+                  styles.emptyButton,
+                  {
+                    backgroundColor: colors.accent,
+                    borderColor: colors.borderStrong,
+                    opacity: pressed ? 0.84 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.emptyButtonText, { color: colors.accentText }]}>
+                  {t("search.clearFilters")}
+                </Text>
+              </FocusablePressable>
+            )}
           </View>
         }
         contentContainerStyle={styles.listContent}
@@ -275,6 +412,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 36,
   },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  filterList: {
+    gap: 10,
+    paddingBottom: 12,
+    paddingTop: 2,
+  },
   resultCount: {
     fontSize: 14,
     fontWeight: "700",
@@ -344,6 +497,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  emptyButton: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginTop: 16,
+    minHeight: 48,
+    paddingHorizontal: 18,
+  },
+  emptyButtonText: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
 });
-
-
