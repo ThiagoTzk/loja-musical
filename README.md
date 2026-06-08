@@ -2,12 +2,13 @@
 
 BlackTone Music é um aplicativo de e-commerce musical desenvolvido com Expo, React Native e Firebase. O projeto simula uma loja real para venda de instrumentos, vinis e produtos musicais, com fluxo de autenticação, catálogo vindo do banco de dados, carrinho, checkout, histórico de compras, dados de perfil e integração com API externa para preenchimento de endereço por CEP.
 
+O projeto foi iniciado como um trabalho de faculdade ministrado pelo professor CARLOS ALBERTO CORREIA LESSA FILHO e depois evoluído como estudo de um aplicativo de e-commerce mais completo.
+
 O app foi pensado seguindo práticas comuns em projetos reais de e-commerce: separação entre interface e serviços, uso de variáveis de ambiente, dados persistidos no Firebase, regras de segurança no Firestore, tratamento de erros, acessibilidade básica, tema claro/escuro e suporte a dois idiomas.
 
-## Alunos
+## Desenvolvedor
 
 - Thiago José Camêlo Nunes
-- Marcela do Nascimento Lima
 
 ## Principais funcionalidades
 
@@ -276,12 +277,13 @@ npm run lint
 
 BlackTone Music is a music e-commerce app built with Expo, React Native and Firebase. The project simulates a real store for musical instruments, vinyl records and music products, including authentication, a database-driven catalog, cart, checkout, purchase history, user profile data and an external API integration for automatic address lookup by ZIP code.
 
+The project started as a college assignment taught by professor CARLOS ALBERTO CORREIA LESSA FILHO and was later expanded as a study of a more complete e-commerce app.
+
 The app was designed using common practices from real e-commerce projects: separation between UI and services, environment variables, data persisted in Firebase, Firestore security rules, error handling, basic accessibility, light/dark theme and bilingual support.
 
-## Students
+## Developer
 
 - Thiago José Camêlo Nunes
-- Marcela do Nascimento Lima
 
 ## Main features
 
