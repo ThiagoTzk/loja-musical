@@ -76,6 +76,36 @@ export type Pedido = {
   usuarioId: string;
 };
 
+export type ProdutoAdmin = Produto & {
+  ativo: boolean;
+  estoque?: number;
+  ordem: number;
+  parcelasMaximas?: number;
+};
+
+export type ProdutoAdminInput = {
+  ativo: boolean;
+  categoria: string;
+  descricao: string;
+  estoque?: number;
+  id: string;
+  imagemLocal: string;
+  imagemUrl?: string;
+  nome: string;
+  ordem: number;
+  parcelasMaximas?: number;
+  preco: number;
+  precoTexto: string;
+};
+
+export type UsuarioAdmin = DadosPerfilUsuario & {
+  atualizadoEm: string;
+  criadoEm: string;
+  email: string;
+  uid: string;
+  ultimoLoginEm: string;
+};
+
 type CriarPedidoParams = {
   cpf: string;
   endereco: string;
@@ -300,7 +330,7 @@ function cartaoPadraoDoFields(fields: FirestoreFields | undefined): CartaoPadrao
   if (!cartaoFields) return null;
 
   const apelido = stringField(cartaoFields, "apelido") ?? "";
-  const bandeira = stringField(cartaoFields, "bandeira") ?? "Cart?o";
+  const bandeira = stringField(cartaoFields, "bandeira") ?? "Cartão";
   const titular = stringField(cartaoFields, "titular") ?? "";
   const ultimos4 = stringField(cartaoFields, "ultimos4") ?? "";
   const validade = stringField(cartaoFields, "validade") ?? "";
@@ -361,6 +391,7 @@ function dadosPerfilDoDocumento(documento: FirestoreDocument): DadosPerfilUsuari
 
   return {
     cartaoPadrao: cartaoPadraoDoFields(fields),
+    admin: booleanField(fields, "admin") ?? false,
     cpf: stringField(fields, "cpf") ?? "",
     dataNascimento: stringField(fields, "dataNascimento") ?? "",
     enderecoPadrao: enderecoPadraoDoFields(fields),
@@ -370,9 +401,22 @@ function dadosPerfilDoDocumento(documento: FirestoreDocument): DadosPerfilUsuari
   };
 }
 
+function usuarioAdminDoDocumento(documento: FirestoreDocument): UsuarioAdmin {
+  const fields = documento.fields;
+
+  return {
+    ...dadosPerfilDoDocumento(documento),
+    atualizadoEm: timestampField(fields, "atualizadoEm") ?? "",
+    criadoEm: timestampField(fields, "criadoEm") ?? "",
+    email: stringField(fields, "email") ?? "",
+    uid: stringField(fields, "uid") ?? documentId(documento),
+    ultimoLoginEm: timestampField(fields, "ultimoLoginEm") ?? "",
+  };
+}
+
 function produtoDoDocumento(
   documento: FirestoreDocument
-): Produto & { ativo: boolean; ordem: number } {
+): ProdutoAdmin {
   const fields = documento.fields;
   const id = documentId(documento);
   const imagemLocal = stringField(fields, "imagemLocal") ?? id;
@@ -391,7 +435,9 @@ function produtoDoDocumento(
     imagemLocal,
     imagemUrl,
     ativo: booleanField(fields, "ativo") ?? true,
+    estoque: numberField(fields, "estoque"),
     ordem: numberField(fields, "ordem") ?? 999,
+    parcelasMaximas: numberField(fields, "parcelasMaximas"),
   };
 }
 
@@ -409,11 +455,67 @@ export async function listarProdutosFirestore() {
   return produtos;
 }
 
+export async function listarProdutosAdminFirestore(usuario: UsuarioFirestore) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+  const dados = await chamarFirestore<FirestoreListResponse>("produtos", {
+    idToken: usuarioAutenticado.idToken,
+    method: "GET",
+  });
+
+  return (dados.documents ?? [])
+    .map(produtoDoDocumento)
+    .sort((a, b) => a.ordem - b.ordem);
+}
+
+export async function salvarProdutoAdminFirestore(
+  usuario: UsuarioFirestore,
+  produto: ProdutoAdminInput
+) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+
+  return chamarFirestore<FirestoreDocument>(
+    `produtos/${produto.id}`,
+    {
+      body: {
+        ativo: produto.ativo,
+        categoria: produto.categoria,
+        descricao: produto.descricao,
+        estoque: produto.estoque ?? 0,
+        imagemLocal: produto.imagemLocal,
+        imagemUrl: produto.imagemUrl ?? "",
+        nome: produto.nome,
+        ordem: produto.ordem,
+        parcelasMaximas: produto.parcelasMaximas ?? 10,
+        preco: produto.preco,
+        precoTexto: produto.precoTexto,
+      },
+      idToken: usuarioAutenticado.idToken,
+      method: "PATCH",
+    }
+  );
+}
+
+export async function excluirProdutoAdminFirestore(
+  usuario: UsuarioFirestore,
+  produtoId: string
+) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+
+  return chamarFirestore<Record<string, never>>(
+    `produtos/${produtoId}`,
+    {
+      idToken: usuarioAutenticado.idToken,
+      method: "DELETE",
+    }
+  );
+}
+
 export async function salvarUsuarioFirestore(usuario: FirebaseAuthUser) {
   const agora = new Date();
 
   return chamarFirestore(`usuarios/${usuario.localId}`, {
     body: {
+      admin: false,
       atualizadoEm: agora,
       cartaoPadrao: null,
       cpf: "",
@@ -646,6 +748,51 @@ export async function listarPedidosUsuarioFirestore(usuario: UsuarioFirestore) {
     .filter((documento): documento is FirestoreDocument => Boolean(documento))
     .map(pedidoDoDocumento)
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+}
+
+export async function listarPedidosAdminFirestore(usuario: UsuarioFirestore) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+  const dados = await chamarFirestore<FirestoreListResponse>("pedidos", {
+    idToken: usuarioAutenticado.idToken,
+    method: "GET",
+  });
+
+  return (dados.documents ?? [])
+    .map(pedidoDoDocumento)
+    .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+}
+
+export async function listarUsuariosAdminFirestore(usuario: UsuarioFirestore) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+  const dados = await chamarFirestore<FirestoreListResponse>("usuarios", {
+    idToken: usuarioAutenticado.idToken,
+    method: "GET",
+  });
+
+  return (dados.documents ?? [])
+    .map(usuarioAdminDoDocumento)
+    .sort((a, b) => a.email.localeCompare(b.email));
+}
+
+export async function atualizarPermissaoAdminUsuarioFirestore(
+  usuario: UsuarioFirestore,
+  userId: string,
+  admin: boolean
+) {
+  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
+
+  return chamarFirestore<FirestoreDocument>(
+    `usuarios/${userId}`,
+    {
+      body: {
+        admin,
+        atualizadoEm: new Date(),
+      },
+      idToken: usuarioAutenticado.idToken,
+      method: "PATCH",
+      updateMask: ["admin", "atualizadoEm"],
+    }
+  );
 }
 
 export async function atualizarStatusPedidoFirestore(

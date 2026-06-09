@@ -133,7 +133,7 @@ export default function Home() {
     return (
       <FocusablePressable
         accessibilityHint={t("home.openProduct")}
-        accessibilityLabel={language === "en" ? `Open details for ${item.nome}, ${item.categoria}, price ${item.preco}` : `Abrir detalhes de ${item.nome}, ${item.categoria}, pre?o ${item.preco}`}
+        accessibilityLabel={language === "en" ? `Open details for ${item.nome}, ${item.categoria}, price ${item.preco}` : `Abrir detalhes de ${item.nome}, ${item.categoria}, preço ${item.preco}`}
         accessibilityRole="button"
         hitSlop={6}
         onPress={() => router.push(`/produto/${item.id}`)}

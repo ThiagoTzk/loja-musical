@@ -10,6 +10,7 @@ import {
 } from "@/src/context/UsuarioContext";
 import { buscarEnderecoPorCep } from "@/src/services/cep";
 import { criarPedidoFirestore } from "@/src/services/firestore";
+import { cpfValido } from "@/src/utils/cpf";
 import { formatarMoeda, precoParaNumero } from "@/src/utils/preco";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -46,14 +47,6 @@ const enderecoVazio: EnderecoPadrao = {
 
 function apenasNumeros(valor: string) {
   return valor.replace(/\D/g, "");
-}
-
-function cpfValido(valor: string) {
-  const cpf = apenasNumeros(valor);
-
-  if (cpf.length !== 11) return false;
-  if (/^(\d)\1+$/.test(cpf)) return false;
-  return true;
 }
 
 function cartaoValido(valor: string) {
@@ -525,7 +518,7 @@ export default function Pagamento() {
                 ]}
               >
                 <Image
-                  accessibilityLabel={`Imagem do produto ${item.nome}`}
+                  accessibilityLabel={language === "en" ? `Product image ${item.nome}` : `Imagem do produto ${item.nome}`}
                   accessibilityRole="image"
                   source={item.imagem}
                   style={[styles.imagem, { backgroundColor: colors.card }]}
@@ -541,7 +534,7 @@ export default function Pagamento() {
 
                 <FocusablePressable
                   accessibilityHint={t("checkout.removeProductHint")}
-                  accessibilityLabel={`Remover ${item.nome}`}
+                  accessibilityLabel={language === "en" ? `Remove ${item.nome}` : `Remover ${item.nome}`}
                   accessibilityRole="button"
                   hitSlop={8}
                   onPress={() => removerProduto(index)}
@@ -745,7 +738,7 @@ export default function Pagamento() {
 
                 return (
                   <FocusablePressable
-                    accessibilityHint={`Seleciona pagamento por ${opcao.titulo}.`}
+                    accessibilityHint={language === "en" ? `Selects payment by ${opcao.titulo}.` : `Seleciona pagamento por ${opcao.titulo}.`}
                     accessibilityLabel={opcao.titulo}
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}

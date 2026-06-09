@@ -114,7 +114,7 @@ export default function Busca() {
         accessibilityLabel={
           language === "en"
             ? `Open details for ${item.nome}, ${item.categoria}, price ${item.preco}`
-            : `Abrir detalhes de ${item.nome}, ${item.categoria}, pre?o ${item.preco}`
+            : `Abrir detalhes de ${item.nome}, ${item.categoria}, preço ${item.preco}`
         }
         accessibilityRole="button"
         hitSlop={6}

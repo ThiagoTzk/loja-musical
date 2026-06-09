@@ -87,6 +87,7 @@ export default function Cadastro() {
 
       sincronizarUsuario({
         email: credencial.email ?? emailLimpo,
+        expiresIn: credencial.expiresIn,
         idToken: credencial.idToken,
         perfilCompleto: false,
         refreshToken: credencial.refreshToken,

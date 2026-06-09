@@ -8,6 +8,7 @@ import { LanguageContext } from "@/src/context/LanguageContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { buscarEnderecoPorCep } from "@/src/services/cep";
 import { atualizarDadosPerfilUsuarioFirestore } from "@/src/services/firestore";
+import { cpfValido } from "@/src/utils/cpf";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useContext, useEffect, useState } from "react";
@@ -44,15 +45,6 @@ function formatarCPF(valor: string) {
   cpf = cpf.replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
   return cpf;
-}
-
-function cpfValido(valor: string) {
-  const cpf = apenasNumeros(valor);
-
-  if (cpf.length !== 11) return false;
-  if (/^(\d)\1+$/.test(cpf)) return false;
-
-  return true;
 }
 
 function formatarDataNascimento(valor: string) {

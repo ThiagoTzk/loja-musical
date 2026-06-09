@@ -25,6 +25,7 @@ O app foi pensado seguindo práticas comuns em projetos reais de e-commerce: sep
 - Dados pessoais do usuário salvos no Firestore.
 - Endereço padrão com preenchimento automático pelo CEP.
 - Cartão padrão salvo de forma simplificada, sem armazenar número completo nem CVV.
+- Painel administrativo para gerenciar produtos, pedidos e usuários.
 - Foto de perfil usando câmera do dispositivo.
 - Tema claro e escuro.
 - Tradução da interface para português e inglês.
@@ -130,6 +131,7 @@ app/
   cadastro.tsx       Criação de conta
   login.tsx          Login
   pagamento.tsx      Checkout e criação de pedidos
+  admin.tsx          Painel administrativo
   dados-conta.tsx    Dados pessoais, endereço e cartão padrão
   produto/[id].tsx   Detalhes do produto
 
@@ -263,9 +265,9 @@ npm run lint
 
 ## Próximos passos
 
-- Criar painel administrativo web para gerenciar produtos, pedidos, promoções e usuários.
+- Evoluir o painel administrativo com promoções, estoque e permissões por função.
 - Integrar Firebase Storage para imagens dos produtos.
-- Criar permissões de administrador no Firestore.
+- Aprimorar permissões de administrador no Firestore com papéis mais detalhados.
 - Adicionar controle de estoque.
 - Adicionar cupom de desconto.
 - Melhorar persistência local da sessão do usuário.
@@ -300,6 +302,7 @@ The app was designed using common practices from real e-commerce projects: separ
 - User personal data saved in Firestore.
 - Default address with automatic ZIP code lookup.
 - Simplified default card storage without saving the full card number or CVV.
+- Admin panel to manage products, orders and users.
 - Profile photo using the device camera.
 - Light and dark theme.
 - Interface translation between Portuguese and English.
@@ -405,6 +408,7 @@ app/
   cadastro.tsx       Account creation
   login.tsx          Login
   pagamento.tsx      Checkout and order creation
+  admin.tsx          Admin panel
   dados-conta.tsx    Personal data, address and default card
   produto/[id].tsx   Product details
 
@@ -538,9 +542,9 @@ npm run lint
 
 ## Next steps
 
-- Create a web admin panel to manage products, orders, promotions and users.
+- Evolve the admin panel with promotions, stock control and role-based permissions.
 - Integrate Firebase Storage for product images.
-- Create administrator permissions in Firestore.
+- Improve Firestore administrator permissions with more detailed roles.
 - Add stock control.
 - Add discount coupons.
 - Improve local session persistence.

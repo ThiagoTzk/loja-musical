@@ -96,6 +96,7 @@ export default function Login() {
       sincronizarUsuario({
         ...dadosPerfil,
         email: credencial.email ?? emailLimpo,
+        expiresIn: credencial.expiresIn,
         idToken: credencial.idToken,
         refreshToken: credencial.refreshToken,
         uid: credencial.localId,

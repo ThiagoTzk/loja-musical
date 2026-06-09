@@ -22,6 +22,14 @@ type FirebaseRestErrorResponse = {
   };
 };
 
+type FirebaseRefreshTokenResponse = {
+  access_token: string;
+  expires_in: string;
+  id_token: string;
+  refresh_token: string;
+  user_id: string;
+};
+
 export type FirebaseAuthUser = {
   email: string;
   expiresIn: string;
@@ -103,4 +111,41 @@ export function cadastrarUsuarioFirebase(email: string, password: string) {
 
 export function entrarUsuarioFirebase(email: string, password: string) {
   return chamarFirebaseAuth("signInWithPassword", email, password);
+}
+
+export async function renovarTokenFirebase(refreshToken: string) {
+  if (!firebaseConfig.apiKey) {
+    throw {
+      code: "auth/invalid-api-key",
+      message: "EXPO_PUBLIC_FIREBASE_API_KEY nao foi encontrada no .env.",
+    };
+  }
+
+  const resposta = await fetch(
+    `https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`,
+    {
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }).toString(),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      method: "POST",
+    }
+  );
+
+  const dados = (await resposta.json()) as FirebaseRefreshTokenResponse &
+    FirebaseRestErrorResponse;
+
+  if (!resposta.ok) {
+    throw criarErroFirebaseAuth(dados.error?.message);
+  }
+
+  return {
+    expiresIn: dados.expires_in,
+    idToken: dados.id_token || dados.access_token,
+    localId: dados.user_id,
+    refreshToken: dados.refresh_token,
+  };
 }
