@@ -31,7 +31,10 @@ export default function Carrinho() {
     router.push("/pagamento");
   }
 
-  const total = carrinho.reduce((acc, item) => acc + precoParaNumero(item.preco), 0);
+  const total = carrinho.reduce(
+    (acc, item) => acc + precoParaNumero(item.preco) * item.quantidade,
+    0
+  );
 
   return (
     <SafeAreaView
@@ -86,6 +89,11 @@ export default function Carrinho() {
                 {item.categoria}
               </Text>
               <Text style={[styles.productPrice, { color: colors.text }]}>{item.preco}</Text>
+              <Text style={[styles.productQuantity, { color: colors.secondaryText }]}>
+                {language === "en"
+                  ? `Quantity: ${item.quantidade}`
+                  : `Quantidade: ${item.quantidade}`}
+              </Text>
             </View>
 
             <FocusablePressable
@@ -199,6 +207,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
     marginTop: 8,
+  },
+  productQuantity: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4,
   },
   removeButton: {
     alignItems: "center",

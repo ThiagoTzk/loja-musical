@@ -119,8 +119,11 @@ export default function Pagamento() {
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
   const [mostrarPopup, setMostrarPopup] = useState(false);
 
-  const total = carrinho.reduce((acc, item) => acc + precoParaNumero(item.preco), 0);
-  const quantidadeItens = carrinho.length;
+  const total = carrinho.reduce(
+    (acc, item) => acc + precoParaNumero(item.preco) * item.quantidade,
+    0
+  );
+  const quantidadeItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0);
   const usaCartao = formaPagamento !== PAGAMENTO_PIX && formaPagamento !== "";
   const usaParcelas = formaPagamento === PAGAMENTO_CREDITO;
   const usandoCartaoPadrao = usaCartao && modoCartao === "padrao" && Boolean(usuario?.cartaoPadrao);
@@ -530,6 +533,11 @@ export default function Pagamento() {
                     {item.categoria}
                   </Text>
                   <Text style={[styles.productPrice, { color: colors.text }]}>{item.preco}</Text>
+                  <Text style={[styles.productQuantity, { color: colors.secondaryText }]}>
+                    {language === "en"
+                      ? `Quantity: ${item.quantidade}`
+                      : `Quantidade: ${item.quantidade}`}
+                  </Text>
                 </View>
 
                 <FocusablePressable
@@ -1147,7 +1155,7 @@ export default function Pagamento() {
 
             <AccessibleButton
               accessibilityHint={t("checkout.goHistoryHint")}
-              onPress={() => router.replace("/(tabs)/perfil")}
+              onPress={() => router.replace("/historico")}
               style={styles.modalButton}
               variant="secondary"
             >{t("checkout.goHistory")}</AccessibleButton>
@@ -1459,6 +1467,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     marginTop: 7,
+  },
+  productQuantity: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4,
   },
   profileWarning: {
     alignItems: "center",

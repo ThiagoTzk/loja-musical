@@ -1,11 +1,14 @@
 import { renovarTokenFirebase } from "@/src/config/firebase-config";
 import { Produto } from "@/src/data/produto";
-import { createContext, ReactNode, useEffect, useState } from "react";
+import { obterDadosUsuarioFirestore } from "@/src/services/firestore";
+import { createContext, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 
 export type ItemHistoricoCompra = Produto & {
   compradoEm: string;
   formaPagamento: string;
   parcelas?: string;
+  quantidade?: number;
 };
 
 type DadosCompra = {
@@ -58,7 +61,10 @@ type UsuarioContextType = {
   usuario: Usuario | null;
   sincronizarUsuario: (dados: string | Partial<Usuario>) => void;
   logout: () => void;
-  adicionarHistorico: (produtos: Produto[], dadosCompra: DadosCompra) => void;
+  adicionarHistorico: (
+    produtos: (Produto & { quantidade?: number })[],
+    dadosCompra: DadosCompra
+  ) => void;
   atualizarDadosPerfil: (dados: DadosPerfilUsuario) => void;
   atualizarFotoPerfil: (fotoPerfil: string) => void;
 };
@@ -66,6 +72,8 @@ type UsuarioContextType = {
 export const UsuarioContext = createContext<UsuarioContextType>(
   {} as UsuarioContextType
 );
+
+const INTERVALO_ATUALIZACAO_USUARIO_MS = 15000;
 
 const enderecoVazio: EnderecoPadrao = {
   bairro: "",
@@ -117,8 +125,35 @@ export function formatarEndereco(endereco?: EnderecoPadrao | null) {
     .join(" | ");
 }
 
+function normalizarCartao(cartao?: CartaoPadrao | null) {
+  if (!cartao) return null;
+
+  return {
+    apelido: cartao.apelido ?? "",
+    bandeira: cartao.bandeira ?? "",
+    titular: cartao.titular ?? "",
+    ultimos4: cartao.ultimos4 ?? "",
+    validade: cartao.validade ?? "",
+  };
+}
+
+function serializarPerfil(dados: DadosPerfilUsuario) {
+  return JSON.stringify({
+    admin: dados.admin ?? false,
+    cartaoPadrao: normalizarCartao(dados.cartaoPadrao),
+    cpf: dados.cpf ?? "",
+    dataNascimento: dados.dataNascimento ?? "",
+    enderecoPadrao: normalizarEndereco(dados.enderecoPadrao),
+    nome: dados.nome ?? "",
+    perfilCompleto: dados.perfilCompleto ?? false,
+    telefone: dados.telefone ?? "",
+  });
+}
+
 export function UsuarioProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const recarregandoUsuarioRef = useRef(false);
+  const usuarioRef = useRef<Usuario | null>(null);
 
   function sincronizarUsuario(dados: string | Partial<Usuario>) {
     const email = typeof dados === "string" ? dados : dados.email ?? "";
@@ -159,7 +194,10 @@ export function UsuarioProvider({ children }: { children: ReactNode }) {
     setUsuario(null);
   }
 
-  function adicionarHistorico(produtos: Produto[], dadosCompra: DadosCompra) {
+  function adicionarHistorico(
+    produtos: (Produto & { quantidade?: number })[],
+    dadosCompra: DadosCompra
+  ) {
     if (!usuario) return;
 
     const compradoEm = dadosCompra.compradoEm ?? new Date().toISOString();
@@ -197,6 +235,65 @@ export function UsuarioProvider({ children }: { children: ReactNode }) {
           : usuario.enderecoPadrao ?? null,
     });
   }
+
+  useEffect(() => {
+    usuarioRef.current = usuario;
+  }, [usuario]);
+
+  const recarregarUsuario = useCallback(async () => {
+    const usuarioAtual = usuarioRef.current;
+
+    if (!usuarioAtual?.uid || !usuarioAtual.idToken) return;
+    if (recarregandoUsuarioRef.current) return;
+
+    recarregandoUsuarioRef.current = true;
+
+    try {
+      const dadosRemotos = await obterDadosUsuarioFirestore({
+        email: usuarioAtual.email,
+        idToken: usuarioAtual.idToken,
+        uid: usuarioAtual.uid,
+      });
+
+      setUsuario((usuarioMaisRecente) => {
+        if (!usuarioMaisRecente || usuarioMaisRecente.uid !== usuarioAtual.uid) {
+          return usuarioMaisRecente;
+        }
+
+        if (serializarPerfil(usuarioMaisRecente) === serializarPerfil(dadosRemotos)) {
+          return usuarioMaisRecente;
+        }
+
+        return {
+          ...usuarioMaisRecente,
+          ...dadosRemotos,
+          cartaoPadrao: normalizarCartao(dadosRemotos.cartaoPadrao),
+          enderecoPadrao: normalizarEndereco(dadosRemotos.enderecoPadrao),
+        };
+      });
+    } catch (error) {
+      console.warn("Nao foi possivel atualizar os dados do usuario.", error);
+    } finally {
+      recarregandoUsuarioRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      void recarregarUsuario();
+    }, INTERVALO_ATUALIZACAO_USUARIO_MS);
+
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void recarregarUsuario();
+      }
+    });
+
+    return () => {
+      clearInterval(intervalo);
+      appStateSubscription.remove();
+    };
+  }, [recarregarUsuario]);
 
   useEffect(() => {
     if (!usuario?.refreshToken || !usuario.tokenExpiresAt) return;

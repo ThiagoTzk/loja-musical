@@ -21,6 +21,10 @@ export default function Home() {
   const { language, t } = useContext(LanguageContext);
   const { colors, theme, toggleTheme } = useContext(ThemeContext);
   const { carregando, erro, origem, produtos } = useContext(ProdutosContext);
+  const produtosHero = produtos.slice(0, 3);
+  const categoriasHome = Array.from(
+    new Set(produtos.map((produto) => produto.categoria))
+  ).slice(0, 4);
 
   function renderHeader() {
     const themeLabel = theme === "dark" ? t("home.themeLight") : t("home.themeDark");
@@ -78,6 +82,30 @@ export default function Home() {
             </View>
           </View>
 
+          {produtosHero.length > 0 && (
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={styles.heroShowcase}
+            >
+              {produtosHero.map((produto, index) => (
+                <View
+                  key={produto.id}
+                  style={[
+                    styles.heroProductTile,
+                    {
+                      backgroundColor: colors.backgroundSoft,
+                      borderColor: colors.border,
+                      transform: [{ rotate: index === 1 ? "3deg" : index === 2 ? "-4deg" : "0deg" }],
+                    },
+                  ]}
+                >
+                  <Image source={produto.imagem} style={styles.heroProductImage} />
+                </View>
+              ))}
+            </View>
+          )}
+
           <Text style={[styles.eyebrow, { color: colors.accent }]}>
             {t("home.type")}
           </Text>
@@ -88,6 +116,38 @@ export default function Home() {
             {t("home.subtitle")}
           </Text>
         </View>
+
+        {categoriasHome.length > 0 && (
+          <View
+            accessibilityLabel={t("search.categoryFilters")}
+            style={styles.categoryRail}
+          >
+            {categoriasHome.map((categoria) => (
+              <FocusablePressable
+                accessibilityHint={t("search.categoryFilters")}
+                accessibilityLabel={categoria}
+                accessibilityRole="button"
+                hitSlop={6}
+                key={categoria}
+                onPress={() =>
+                  router.push(`/busca?categoria=${encodeURIComponent(categoria)}`)
+                }
+                style={({ pressed }) => [
+                  styles.categoryPill,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    opacity: pressed ? 0.82 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.categoryPillText, { color: colors.text }]}>
+                  {categoria}
+                </Text>
+              </FocusablePressable>
+            ))}
+          </View>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>
@@ -224,6 +284,26 @@ const styles = StyleSheet.create({
     top: -70,
     width: 180,
   },
+  heroShowcase: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 22,
+    marginTop: -12,
+  },
+  heroProductTile: {
+    alignItems: "center",
+    borderRadius: 20,
+    borderWidth: 1,
+    flex: 1,
+    height: 104,
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  heroProductImage: {
+    height: 82,
+    resizeMode: "contain",
+    width: "86%",
+  },
   topBar: {
     alignItems: "center",
     flexDirection: "row",
@@ -276,6 +356,24 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  categoryRail: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: -6,
+  },
+  categoryPill: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  categoryPillText: {
+    fontSize: 13,
+    fontWeight: "900",
   },
   sectionTitle: {
     fontSize: 22,

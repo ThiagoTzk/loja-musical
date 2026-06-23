@@ -16,6 +16,31 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.admin == true;
     }
 
+    function isSafeUserUpdate(userId) {
+      return isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "atualizadoEm",
+          "cartaoPadrao",
+          "cpf",
+          "dataNascimento",
+          "enderecoPadrao",
+          "nome",
+          "perfilCompleto",
+          "telefone",
+          "ultimoLoginEm"
+        ])
+        && request.resource.data.admin == resource.data.admin
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.uid == resource.data.uid;
+    }
+
+    function isSafeUserCreate(userId) {
+      return isOwner(userId)
+        && request.resource.data.admin == false
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.uid == request.auth.uid;
+    }
+
     match /produtos/{produtoId} {
       allow get, list: if true;
       allow create, update, delete: if isAdmin();
@@ -25,15 +50,15 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.usuarioId == request.auth.uid;
       allow get, list: if isAdmin() || (signedIn() && resource.data.usuarioId == request.auth.uid);
-      allow update, delete: if isAdmin() || (signedIn() && resource.data.usuarioId == request.auth.uid);
+      allow update, delete: if isAdmin();
     }
 
     match /usuarios/{userId} {
-      allow create: if isOwner(userId) && request.resource.data.admin != true;
+      allow create: if isSafeUserCreate(userId);
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
       allow update: if isAdmin()
-        || (isOwner(userId) && request.resource.data.admin == resource.data.admin);
+        || isSafeUserUpdate(userId);
       allow delete: if false;
     }
   }

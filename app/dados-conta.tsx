@@ -10,7 +10,7 @@ import { buscarEnderecoPorCep } from "@/src/services/cep";
 import { atualizarDadosPerfilUsuarioFirestore } from "@/src/services/firestore";
 import { cpfValido } from "@/src/utils/cpf";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -32,6 +32,8 @@ const enderecoVazio: EnderecoPadrao = {
   numero: "",
   rua: "",
 };
+
+type SecaoConta = "todas" | "pessoal" | "endereco" | "cartao";
 
 function apenasNumeros(valor: string) {
   return valor.replace(/\D/g, "");
@@ -93,6 +95,7 @@ export default function DadosConta() {
   const { t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { atualizarDadosPerfil, usuario } = useContext(UsuarioContext);
+  const { secao } = useLocalSearchParams<{ secao?: string }>();
 
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
@@ -110,6 +113,29 @@ export default function DadosConta() {
   const [salvando, setSalvando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [sucesso, setSucesso] = useState("");
+  const secaoAtual: SecaoConta =
+    secao === "pessoal" || secao === "endereco" || secao === "cartao"
+      ? secao
+      : "todas";
+  const mostraPessoal = secaoAtual === "todas" || secaoAtual === "pessoal";
+  const mostraEndereco = secaoAtual === "todas" || secaoAtual === "endereco";
+  const mostraCartao = secaoAtual === "todas" || secaoAtual === "cartao";
+  const tituloTela =
+    secaoAtual === "pessoal"
+      ? t("account.personal")
+      : secaoAtual === "endereco"
+        ? t("account.address")
+        : secaoAtual === "cartao"
+          ? t("account.card")
+          : t("account.header");
+  const subtituloTela =
+    secaoAtual === "pessoal"
+      ? t("account.personalHint")
+      : secaoAtual === "endereco"
+        ? t("account.addressHint")
+        : secaoAtual === "cartao"
+          ? t("account.cardHint")
+          : t("account.subtitle");
 
   useEffect(() => {
     if (!usuario) return;
@@ -187,19 +213,19 @@ export default function DadosConta() {
   }
 
   function validarFormulario() {
-    if (nome.trim().length > 0 && nome.trim().length < 3) {
+    if (mostraPessoal && nome.trim().length > 0 && nome.trim().length < 3) {
       return t("account.nameError");
     }
 
-    if (cpf && !cpfValido(cpf)) {
+    if (mostraPessoal && cpf && !cpfValido(cpf)) {
       return t("account.cpfError");
     }
 
-    if (dataNascimento && !dataNascimentoValida(dataNascimento)) {
+    if (mostraPessoal && dataNascimento && !dataNascimentoValida(dataNascimento)) {
       return t("account.birthDateError");
     }
 
-    const querSalvarCartao = Boolean(
+    const querSalvarCartao = mostraCartao && Boolean(
       cartaoApelido.trim() ||
         cartaoBandeira.trim() ||
         cartaoTitular.trim() ||
@@ -319,11 +345,12 @@ export default function DadosConta() {
             </View>
             <View style={styles.heroText}>
               <Text style={[styles.kicker, { color: colors.accent }]}>{t("account.myAccount")}</Text>
-              <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{t("account.header")}</Text>
-              <Text style={[styles.description, { color: colors.secondaryText }]}>{t("account.subtitle")}</Text>
+              <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{tituloTela}</Text>
+              <Text style={[styles.description, { color: colors.secondaryText }]}>{subtituloTela}</Text>
             </View>
           </View>
 
+          {mostraPessoal && (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t("account.personal")}</Text>
             <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{t("account.personalHint")}</Text>
@@ -386,7 +413,9 @@ export default function DadosConta() {
               />
             </View>
           </View>
+          )}
 
+          {mostraEndereco && (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t("account.address")}</Text>
             <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{t("account.addressHint")}</Text>
@@ -503,7 +532,9 @@ export default function DadosConta() {
               />
             </View>
           </View>
+          )}
 
+          {mostraCartao && (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t("account.card")}</Text>
             <Text style={[styles.sectionHint, { color: colors.secondaryText }]}>{t("account.cardHint")}</Text>
@@ -579,6 +610,7 @@ export default function DadosConta() {
               />
             </View>
           </View>
+          )}
 
           {erro !== "" && (
             <Text accessibilityRole="alert" style={[styles.message, { backgroundColor: colors.dangerBackground, color: colors.danger }]}>{erro}</Text>

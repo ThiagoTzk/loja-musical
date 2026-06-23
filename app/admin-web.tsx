@@ -22,11 +22,12 @@ import {
   salvarProdutoAdminFirestore,
   UsuarioAdmin,
 } from "@/src/services/firestore";
+import { imagemLocalExiste } from "@/src/data/produto";
 import { descreverErroFirebaseAuth } from "@/src/utils/firebase-auth-errors";
 import { formatarMoeda, precoParaNumero } from "@/src/utils/preco";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Platform,
@@ -39,6 +40,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type AbaAdminWeb = "visao" | "produtos" | "pedidos" | "usuarios";
+
+type AdminFieldColors = {
+  border: string;
+  inputBackground: string;
+  mutedText: string;
+  text: string;
+};
 
 type ProdutoFormWeb = {
   ativo: boolean;
@@ -67,6 +75,8 @@ const produtoVazio: ProdutoFormWeb = {
   parcelasMaximas: "10",
   precoTexto: "",
 };
+
+const INTERVALO_ATUALIZACAO_ADMIN_MS = 8000;
 
 function novoProdutoId(produtos: ProdutoAdmin[]) {
   const maiorIdNumerico = produtos.reduce((maior, produto) => {
@@ -144,10 +154,50 @@ function statusLabel(status: PedidoStatus) {
   return labels[status] ?? status;
 }
 
+function quantidadeItensPedido(pedido: Pedido) {
+  return pedido.itens.reduce((total, item) => total + item.quantidade, 0);
+}
+
+function AdminField({
+  colors,
+  keyboard,
+  label,
+  onChange,
+  value,
+}: {
+  colors: AdminFieldColors;
+  keyboard?: "default" | "numeric";
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <View style={styles.fieldWrap}>
+      <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+      <TextInput
+        keyboardType={keyboard}
+        onChangeText={onChange}
+        placeholder={label}
+        placeholderTextColor={colors.mutedText}
+        style={[
+          styles.input,
+          {
+            backgroundColor: colors.inputBackground,
+            borderColor: colors.border,
+            color: colors.text,
+          },
+        ]}
+        value={value}
+      />
+    </View>
+  );
+}
+
 export default function AdminWeb() {
   const { colors } = useContext(ThemeContext);
   const { recarregarProdutos } = useContext(ProdutosContext);
   const { logout, sincronizarUsuario, usuario } = useContext(UsuarioContext);
+  const carregandoAdminRef = useRef(false);
 
   const [aba, setAba] = useState<AbaAdminWeb>("visao");
   const [email, setEmail] = useState("");
@@ -206,10 +256,15 @@ export default function AdminWeb() {
   const totalPedidos = pedidos.reduce((total, pedido) => total + pedido.total, 0);
   const pedidosPendentes = pedidos.filter((pedido) => pedido.status === "realizado").length;
 
-  const carregarAdmin = useCallback(async () => {
+  const carregarAdmin = useCallback(async (silencioso = false) => {
     if (!usuario?.admin) return;
+    if (carregandoAdminRef.current) return;
 
-    setCarregando(true);
+    carregandoAdminRef.current = true;
+
+    if (!silencioso) {
+      setCarregando(true);
+    }
     setErro("");
 
     try {
@@ -238,13 +293,27 @@ export default function AdminWeb() {
       console.warn("Nao foi possivel carregar o admin web.", error);
       setErro(`Nao foi possivel carregar o painel: ${descreverErroAdmin(error)}`);
     } finally {
-      setCarregando(false);
+      if (!silencioso) {
+        setCarregando(false);
+      }
+
+      carregandoAdminRef.current = false;
     }
   }, [usuario]);
 
   useEffect(() => {
     void carregarAdmin();
   }, [carregarAdmin]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !usuario?.admin) return;
+
+    const intervalo = setInterval(() => {
+      void carregarAdmin(true);
+    }, INTERVALO_ATUALIZACAO_ADMIN_MS);
+
+    return () => clearInterval(intervalo);
+  }, [carregarAdmin, usuario?.admin]);
 
   async function entrarAdmin() {
     if (carregandoLogin) return;
@@ -314,11 +383,15 @@ export default function AdminWeb() {
     const ordem = Number(form.ordem);
     const estoque = Number(form.estoque);
     const parcelasMaximas = Number(form.parcelasMaximas);
+    const imagemLocal = form.imagemLocal.trim() || form.id.trim();
 
     if (!form.id.trim()) return "Informe o ID do produto.";
     if (!form.nome.trim()) return "Informe o nome do produto.";
     if (!form.categoria.trim()) return "Informe a categoria.";
     if (!form.descricao.trim()) return "Informe a descricao.";
+    if (!form.imagemUrl.trim() && !imagemLocalExiste(imagemLocal)) {
+      return "Informe uma imagem local cadastrada ou uma URL de imagem.";
+    }
     if (preco <= 0) return "Informe um preco valido.";
     if (!Number.isFinite(ordem) || ordem <= 0) return "Informe uma ordem valida.";
     if (!Number.isFinite(estoque) || estoque < 0) return "Informe um estoque valido.";
@@ -517,32 +590,6 @@ export default function AdminWeb() {
     return (
       <View style={[styles.statusBadge, { backgroundColor: ativo ? colors.successBackground : colors.dangerBackground }]}>
         <Text style={[styles.statusBadgeText, { color: ativo ? colors.success : colors.danger }]}>{label}</Text>
-      </View>
-    );
-  }
-
-  function Field({
-    keyboard,
-    label,
-    onChange,
-    value,
-  }: {
-    keyboard?: "default" | "numeric";
-    label: string;
-    onChange: (value: string) => void;
-    value: string;
-  }) {
-    return (
-      <View style={styles.fieldWrap}>
-        <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
-        <TextInput
-          keyboardType={keyboard}
-          onChangeText={onChange}
-          placeholder={label}
-          placeholderTextColor={colors.mutedText}
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
-          value={value}
-        />
       </View>
     );
   }
@@ -783,11 +830,11 @@ export default function AdminWeb() {
                 <Text style={[styles.panelHint, { color: colors.secondaryText }]}>Salva diretamente em produtos no Firestore.</Text>
 
                 <View style={styles.formRow}>
-                  <Field label="ID" value={form.id} onChange={(value) => atualizarCampo("id", value)} />
-                  <Field label="Ordem" keyboard="numeric" value={form.ordem} onChange={(value) => atualizarCampo("ordem", apenasNumeros(value))} />
+                  <AdminField colors={colors} label="ID" value={form.id} onChange={(value) => atualizarCampo("id", value)} />
+                  <AdminField colors={colors} label="Ordem" keyboard="numeric" value={form.ordem} onChange={(value) => atualizarCampo("ordem", apenasNumeros(value))} />
                 </View>
-                <Field label="Nome" value={form.nome} onChange={(value) => atualizarCampo("nome", value)} />
-                <Field label="Categoria" value={form.categoria} onChange={(value) => atualizarCampo("categoria", value)} />
+                <AdminField colors={colors} label="Nome" value={form.nome} onChange={(value) => atualizarCampo("nome", value)} />
+                <AdminField colors={colors} label="Categoria" value={form.categoria} onChange={(value) => atualizarCampo("categoria", value)} />
                 <Text style={[styles.label, { color: colors.text }]}>Descricao</Text>
                 <TextInput
                   multiline
@@ -798,14 +845,14 @@ export default function AdminWeb() {
                   value={form.descricao}
                 />
                 <View style={styles.formRow}>
-                  <Field label="Preco" value={form.precoTexto} onChange={(value) => atualizarCampo("precoTexto", value)} />
-                  <Field label="Estoque" keyboard="numeric" value={form.estoque} onChange={(value) => atualizarCampo("estoque", apenasNumeros(value))} />
+                  <AdminField colors={colors} label="Preco" value={form.precoTexto} onChange={(value) => atualizarCampo("precoTexto", value)} />
+                  <AdminField colors={colors} label="Estoque" keyboard="numeric" value={form.estoque} onChange={(value) => atualizarCampo("estoque", apenasNumeros(value))} />
                 </View>
                 <View style={styles.formRow}>
-                  <Field label="Parcelas max." keyboard="numeric" value={form.parcelasMaximas} onChange={(value) => atualizarCampo("parcelasMaximas", apenasNumeros(value))} />
-                  <Field label="Imagem local" value={form.imagemLocal} onChange={(value) => atualizarCampo("imagemLocal", value)} />
+                  <AdminField colors={colors} label="Parcelas max." keyboard="numeric" value={form.parcelasMaximas} onChange={(value) => atualizarCampo("parcelasMaximas", apenasNumeros(value))} />
+                  <AdminField colors={colors} label="Imagem local" value={form.imagemLocal} onChange={(value) => atualizarCampo("imagemLocal", value)} />
                 </View>
-                <Field label="Imagem URL" value={form.imagemUrl} onChange={(value) => atualizarCampo("imagemUrl", value)} />
+                <AdminField colors={colors} label="Imagem URL" value={form.imagemUrl} onChange={(value) => atualizarCampo("imagemUrl", value)} />
 
                 <FocusablePressable
                   accessibilityLabel={form.ativo ? "Produto ativo" : "Produto inativo"}
@@ -843,7 +890,7 @@ export default function AdminWeb() {
                   <View style={styles.orderHeader}>
                     <View style={styles.flex1}>
                       <Text style={[styles.rowTitle, { color: colors.text }]}>Pedido #{pedido.id.slice(-6)}</Text>
-                      <Text style={[styles.rowMeta, { color: colors.secondaryText }]}>{pedido.usuarioEmail} | {dataCurta(pedido.criadoEm)} | {pedido.itens.length} itens</Text>
+                      <Text style={[styles.rowMeta, { color: colors.secondaryText }]}>{pedido.usuarioEmail} | {dataCurta(pedido.criadoEm)} | {quantidadeItensPedido(pedido)} itens</Text>
                     </View>
                     <Text style={[styles.orderTotal, { color: colors.text }]}>{pedido.totalTexto}</Text>
                     <StatusBadge ativo={pedido.status !== "cancelado"} label={statusLabel(pedido.status)} />

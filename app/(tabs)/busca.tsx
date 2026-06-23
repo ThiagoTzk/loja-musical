@@ -4,8 +4,8 @@ import { ProdutosContext } from "@/src/context/ProdutosContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
 import { Produto } from "@/src/data/produto";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useContext, useMemo, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Image,
@@ -60,6 +60,7 @@ export default function Busca() {
   const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
   const { erro, produtos } = useContext(ProdutosContext);
+  const { categoria } = useLocalSearchParams<{ categoria?: string }>();
   const [busca, setBusca] = useState("");
   const [categoriaSelecionada, setCategoriaSelecionada] =
     useState(CATEGORIA_TODOS);
@@ -71,6 +72,18 @@ export default function Busca() {
 
     return [CATEGORIA_TODOS, ...categoriasUnicas];
   }, [produtos]);
+
+  useEffect(() => {
+    if (!categoria || Array.isArray(categoria)) return;
+
+    const categoriaEncontrada = categorias.find(
+      (item) => normalizarTexto(item) === normalizarTexto(categoria)
+    );
+
+    if (categoriaEncontrada) {
+      setCategoriaSelecionada(categoriaEncontrada);
+    }
+  }, [categoria, categorias]);
 
   const produtosFiltrados = useMemo(() => {
     const termos = dividirTermos(busca);

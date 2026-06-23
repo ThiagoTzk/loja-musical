@@ -30,6 +30,10 @@ export function resolverImagemProduto(id: string, imagemUrl?: string) {
   return imagensLocais[id] ?? imagensLocais["1"];
 }
 
+export function imagemLocalExiste(id: string) {
+  return Boolean(imagensLocais[id]);
+}
+
 export const produtos: Produto[] = [
   {
     id: "1",

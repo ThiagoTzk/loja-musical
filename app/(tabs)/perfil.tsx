@@ -2,23 +2,12 @@ import { AccessibleButton } from "@/components/accessible-button";
 import { FocusablePressable } from "@/components/focusable-pressable";
 import { LanguageToggle } from "@/components/language-toggle";
 import { LanguageContext } from "@/src/context/LanguageContext";
-import {
-  formatarEndereco,
-  UsuarioContext,
-} from "@/src/context/UsuarioContext";
+import { UsuarioContext } from "@/src/context/UsuarioContext";
 import { ThemeContext } from "@/src/context/ThemeContext";
-import { resolverImagemProduto } from "@/src/data/produto";
-import {
-  atualizarStatusPedidoFirestore,
-  excluirPedidoFirestore,
-  listarPedidosUsuarioFirestore,
-  Pedido,
-  PedidoStatus,
-} from "@/src/services/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -30,29 +19,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-function formatarDataCompra(
-  valor: string,
-  language: "pt" | "en",
-  textos: { indisponivel: string; prefixo: string }
-) {
-  const data = new Date(valor);
-
-  if (Number.isNaN(data.getTime())) {
-    return textos.indisponivel;
-  }
-
-  const locale = language === "en" ? "en-US" : "pt-BR";
-  const separador = language === "en" ? " at " : " às ";
-
-  return `${textos.prefixo} ${data.toLocaleDateString(locale)}${separador}${data.toLocaleTimeString(
-    locale,
-    {
-      hour: "2-digit",
-      minute: "2-digit",
-    }
-  )}`;
-}
-
 export default function Perfil() {
   const { language, t } = useContext(LanguageContext);
   const { colors } = useContext(ThemeContext);
@@ -61,52 +27,35 @@ export default function Perfil() {
   const [mostrarCamera, setMostrarCamera] = useState(false);
   const [tipoCamera, setTipoCamera] = useState<"front" | "back">("back");
   const [erroCamera, setErroCamera] = useState("");
-  const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const [carregandoPedidos, setCarregandoPedidos] = useState(false);
-  const [erroPedidos, setErroPedidos] = useState("");
-  const [pedidoEmAcao, setPedidoEmAcao] = useState("");
-
   const [, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
-  const usandoFirestore = Boolean(usuario?.uid && usuario?.idToken);
-  const totalHistorico = usandoFirestore
-    ? pedidos.reduce((total, pedido) => total + pedido.itens.length, 0)
-    : usuario?.historico.length ?? 0;
-  const enderecoResumo = formatarEndereco(usuario?.enderecoPadrao);
-  const textosDataCompra = {
-    indisponivel: t("profile.purchaseDateMissing"),
-    prefixo: t("profile.purchasedOn"),
-  };
-  const statusLabels: Record<PedidoStatus, string> = {
-    cancelado: t("profile.statusCanceled"),
-    entregue: t("profile.statusDelivered"),
-    realizado: t("profile.statusCreated"),
-  };
-
-  const carregarPedidos = useCallback(async () => {
-    if (!usuario?.uid || !usuario.idToken) {
-      setPedidos([]);
-      return;
-    }
-
-    setCarregandoPedidos(true);
-    setErroPedidos("");
-
-    try {
-      const pedidosFirestore = await listarPedidosUsuarioFirestore(usuario);
-      setPedidos(pedidosFirestore);
-    } catch (error) {
-      console.warn("Não foi possível carregar pedidos do Firestore.", error);
-      setErroPedidos(t("profile.ordersLoadError"));
-    } finally {
-      setCarregandoPedidos(false);
-    }
-  }, [t, usuario]);
-
-  useEffect(() => {
-    void carregarPedidos();
-  }, [carregarPedidos]);
-
+  const secoesConta = usuario
+    ? [
+        {
+          badge: usuario.nome && usuario.cpf ? t("profile.complete") : t("profile.pending"),
+          icon: "person-circle" as keyof typeof Ionicons.glyphMap,
+          route: "/dados-conta?secao=pessoal",
+          title: t("account.personal"),
+        },
+        {
+          badge: usuario.enderecoPadrao ? t("profile.complete") : t("profile.pending"),
+          icon: "location" as keyof typeof Ionicons.glyphMap,
+          route: "/dados-conta?secao=endereco",
+          title: t("account.address"),
+        },
+        {
+          badge: usuario.cartaoPadrao ? t("profile.complete") : t("profile.pending"),
+          icon: "card" as keyof typeof Ionicons.glyphMap,
+          route: "/dados-conta?secao=cartao",
+          title: t("account.card"),
+        },
+        {
+          icon: "receipt" as keyof typeof Ionicons.glyphMap,
+          route: "/historico",
+          title: t("profile.history"),
+        },
+      ]
+    : [];
   async function tirarFoto() {
     if (cameraRef.current) {
       const photo = await cameraRef.current.takePictureAsync();
@@ -129,42 +78,6 @@ export default function Perfil() {
     }
 
     setErroCamera(t("profile.cameraPermissionError"));
-  }
-
-  async function atualizarStatusPedido(pedidoId: string, status: PedidoStatus) {
-    if (!usuario) return;
-
-    setPedidoEmAcao(pedidoId);
-    setErroPedidos("");
-
-    try {
-      await atualizarStatusPedidoFirestore(usuario, pedidoId, status);
-      await carregarPedidos();
-    } catch (error) {
-      console.warn("Não foi possível atualizar o pedido no Firestore.", error);
-      setErroPedidos(t("profile.orderUpdateError"));
-    } finally {
-      setPedidoEmAcao("");
-    }
-  }
-
-  async function excluirPedido(pedidoId: string) {
-    if (!usuario) return;
-
-    setPedidoEmAcao(pedidoId);
-    setErroPedidos("");
-
-    try {
-      await excluirPedidoFirestore(usuario, pedidoId);
-      setPedidos((pedidosAtuais) =>
-        pedidosAtuais.filter((pedido) => pedido.id !== pedidoId)
-      );
-    } catch (error) {
-      console.warn("Não foi possível excluir o pedido do Firestore.", error);
-      setErroPedidos(t("profile.orderDeleteError"));
-    } finally {
-      setPedidoEmAcao("");
-    }
   }
 
   if (!usuario) {
@@ -211,7 +124,10 @@ export default function Perfil() {
       edges={["top", "left", "right"]}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.titleRow}>
           <Text accessibilityRole="header" style={[styles.titulo, { color: colors.text }]}>
             {t("profile.title")}
@@ -287,62 +203,88 @@ export default function Perfil() {
           </View>
         )}
 
-        <FocusablePressable
-          accessibilityHint={t("account.saveHint")}
-          accessibilityLabel={t("profile.data")}
-          accessibilityRole="button"
-          hitSlop={6}
-          onPress={() => router.push("/dados-conta")}
-          style={({ pressed }) => [
-            styles.dataCard,
+        <View
+          accessibilityRole="menu"
+          style={[
+            styles.accountMenu,
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
-              opacity: pressed ? 0.84 : 1,
               shadowColor: colors.shadow,
             },
           ]}
         >
-          <View style={[styles.dataIcon, { backgroundColor: colors.accent }]}>
-            <Ionicons
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-              name="person-circle"
-              size={30}
-              color={colors.accentText}
-            />
-          </View>
-
-          <View style={styles.dataInfo}>
-            <View style={styles.dataHeader}>
-              <Text style={[styles.dataTitle, { color: colors.text }]}>{t("profile.data")}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: colors.backgroundSoft }]}>
-                <Text style={[styles.statusText, { color: colors.text }]}>
-                  {usuario.perfilCompleto ? t("profile.complete") : t("profile.pending")}
-                </Text>
-              </View>
+          <View style={styles.accountMenuHeader}>
+            <View>
+              <Text style={[styles.menuEyebrow, { color: colors.accent }]}>
+                {t("account.myAccount")}
+              </Text>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>
+                {t("profile.data")}
+              </Text>
             </View>
-            <Text style={[styles.dataDescription, { color: colors.secondaryText }]}>
-              {usuario.nome || t("profile.dataDescription")}
-            </Text>
-            <Text style={[styles.dataDescription, { color: colors.secondaryText }]}>
-              {enderecoResumo || t("profile.noAddress")}
-            </Text>
-            <Text style={[styles.dataDescription, { color: colors.secondaryText }]}>
-              {usuario.cartaoPadrao
-                ? `${usuario.cartaoPadrao.apelido} ${t("checkout.cardFinal")} ${usuario.cartaoPadrao.ultimos4}`
-                : t("profile.cardMissing")}
-            </Text>
           </View>
 
-          <Ionicons
-            accessibilityElementsHidden
-            importantForAccessibility="no"
-            name="chevron-forward"
-            size={22}
-            color={colors.secondaryText}
-          />
-        </FocusablePressable>
+          <View style={styles.accountSectionList}>
+            {secoesConta.map((secaoConta) => (
+              <FocusablePressable
+                accessibilityHint={
+                  secaoConta.route === "/historico"
+                    ? language === "en"
+                      ? "Opens purchase history."
+                      : "Abre o historico de compras."
+                    : t("account.saveHint")
+                }
+                accessibilityLabel={secaoConta.title}
+                accessibilityRole="menuitem"
+                hitSlop={6}
+                key={secaoConta.title}
+                onPress={() => router.push(secaoConta.route as never)}
+                style={({ pressed }) => [
+                  styles.accountSection,
+                  {
+                    backgroundColor: colors.backgroundSoft,
+                    borderColor: colors.border,
+                    opacity: pressed ? 0.82 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.dataIcon, { backgroundColor: colors.accent }]}>
+                  <Ionicons
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
+                    name={secaoConta.icon}
+                    size={24}
+                    color={colors.accentText}
+                  />
+                </View>
+
+                <View style={styles.dataInfo}>
+                  <View style={styles.dataHeader}>
+                    <Text style={[styles.dataTitle, { color: colors.text }]}>
+                      {secaoConta.title}
+                    </Text>
+                    {secaoConta.badge && (
+                      <View style={[styles.statusBadge, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.statusText, { color: colors.text }]}>
+                          {secaoConta.badge}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <Ionicons
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  name="chevron-forward"
+                  size={22}
+                  color={colors.secondaryText}
+                />
+              </FocusablePressable>
+            ))}
+          </View>
+        </View>
 
         {usuario.admin && Platform.OS === "web" && (
           <FocusablePressable
@@ -395,210 +337,6 @@ export default function Perfil() {
             />
           </FocusablePressable>
         )}
-
-        <View style={styles.historyHeader}>
-          <Text accessibilityRole="header" style={[styles.subtituloHistorico, { color: colors.text }]}>
-            {t("profile.history")}
-          </Text>
-          <Text style={[styles.historyCount, { color: colors.mutedText }]}>
-            {carregandoPedidos
-              ? t("common.loading")
-              : `${totalHistorico} ${
-                  language === "en"
-                    ? totalHistorico === 1
-                      ? "item"
-                      : "items"
-                    : totalHistorico === 1
-                      ? "item"
-                      : "itens"
-                }`}
-          </Text>
-        </View>
-
-        {erroPedidos !== "" && (
-          <Text
-            accessibilityRole="alert"
-            style={[
-              styles.error,
-              { backgroundColor: colors.dangerBackground, color: colors.danger },
-            ]}
-          >
-            {erroPedidos}
-          </Text>
-        )}
-
-        {usandoFirestore && !carregandoPedidos && pedidos.length === 0 && (
-          <View
-            accessibilityRole="summary"
-            style={[
-              styles.emptyHistory,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t("profile.noPurchases")}</Text>
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              {t("profile.noPurchasesText")}
-            </Text>
-          </View>
-        )}
-
-        {usandoFirestore &&
-          pedidos.map((pedido) => (
-            <View
-              key={pedido.id}
-              style={[
-                styles.pedidoCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.pedidoHeader}>
-                <View style={styles.pedidoHeaderInfo}>
-                  <Text style={[styles.pedidoTitle, { color: colors.text }]}>
-                    {t("profile.order")} #{pedido.id.slice(-6)}
-                  </Text>
-                  <Text style={[styles.historyDate, { color: colors.secondaryText }]}>
-                    {formatarDataCompra(pedido.criadoEm, language, textosDataCompra)}
-                  </Text>
-                </View>
-
-                <View style={[styles.statusBadge, { backgroundColor: colors.backgroundSoft }]}>
-                  <Text style={[styles.statusText, { color: colors.text }]}>
-                    {statusLabels[pedido.status] ?? t("profile.statusCreated")}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={[styles.historyPayment, { color: colors.secondaryText }]}>
-                {t("profile.payment")}: {pedido.formaPagamento}
-                {pedido.parcelas ? ` ${t("profile.installmentIn")} ${pedido.parcelas}x` : ""} | {t("common.total")}: {pedido.totalTexto}
-              </Text>
-
-              {pedido.itens.map((item) => (
-                <View
-                  key={`${pedido.id}-${item.produtoId}`}
-                  style={[
-                    styles.itemHistorico,
-                    { backgroundColor: colors.backgroundSoft, borderColor: colors.border },
-                  ]}
-                >
-                  <Image
-                    accessibilityLabel={language === "en" ? `Product image ${item.nome}` : `Imagem do produto ${item.nome}`}
-                    accessibilityRole="image"
-                    source={resolverImagemProduto(item.imagemLocal, item.imagemUrl)}
-                    style={[styles.imagem, { backgroundColor: colors.backgroundSoft }]}
-                  />
-
-                  <View style={styles.historyInfo}>
-                    <FocusablePressable
-                      accessibilityHint={t("profile.openPurchasedProductHint")}
-                      accessibilityLabel={language === "en" ? `Open details for ${item.nome}` : `Abrir detalhes de ${item.nome}`}
-                      accessibilityRole="button"
-                      hitSlop={6}
-                      onPress={() => router.push(`/produto/${item.produtoId}`)}
-                      style={({ pressed }) => [
-                        styles.historyNameLink,
-                        {
-                          borderColor: colors.border,
-                          opacity: pressed ? 0.78 : 1,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.historyName, { color: colors.text }]}>
-                        {item.nome}
-                      </Text>
-                    </FocusablePressable>
-                    <Text style={[styles.historyCategory, { color: colors.secondaryText }]}>
-                      {item.categoria}
-                    </Text>
-                    <Text style={[styles.historyPrice, { color: colors.text }]}>{item.preco}</Text>
-                  </View>
-                </View>
-              ))}
-
-              <View style={styles.historyActions}>
-                <AccessibleButton
-                  accessibilityHint={t("profile.markDeliveredHint")}
-                  disabled={pedido.status === "entregue" || pedidoEmAcao === pedido.id}
-                  onPress={() => atualizarStatusPedido(pedido.id, "entregue")}
-                  style={styles.historyActionButton}
-                  variant="secondary"
-                >
-                  {pedido.status === "entregue" ? t("profile.orderDelivered") : t("profile.markDelivered")}
-                </AccessibleButton>
-
-                <AccessibleButton
-                  accessibilityHint={t("profile.deleteHistoryHint")}
-                  disabled={pedidoEmAcao === pedido.id}
-                  onPress={() => excluirPedido(pedido.id)}
-                  style={styles.historyActionButton}
-                  variant="danger"
-                >{t("profile.deleteHistory")}</AccessibleButton>
-              </View>
-            </View>
-          ))}
-
-        {!usandoFirestore && usuario.historico.length === 0 && (
-          <View
-            accessibilityRole="summary"
-            style={[
-              styles.emptyHistory,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t("profile.noPurchases")}</Text>
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              {t("profile.noPurchasesText")}
-            </Text>
-          </View>
-        )}
-
-        {!usandoFirestore &&
-          usuario.historico.map((item, index) => (
-            <View
-              key={`${item.id}-${index}`}
-              style={[
-                styles.itemHistorico,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <Image
-                accessibilityLabel={language === "en" ? `Product image ${item.nome}` : `Imagem do produto ${item.nome}`}
-                accessibilityRole="image"
-                source={item.imagem}
-                style={[styles.imagem, { backgroundColor: colors.backgroundSoft }]}
-              />
-
-              <View style={styles.historyInfo}>
-                <FocusablePressable
-                  accessibilityHint={t("profile.openPurchasedProductHint")}
-                  accessibilityLabel={language === "en" ? `Open details for ${item.nome}` : `Abrir detalhes de ${item.nome}`}
-                  accessibilityRole="button"
-                  hitSlop={6}
-                  onPress={() => router.push(`/produto/${item.id}`)}
-                  style={({ pressed }) => [
-                    styles.historyNameLink,
-                    {
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.78 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.historyName, { color: colors.text }]}>{item.nome}</Text>
-                </FocusablePressable>
-                <Text style={[styles.historyCategory, { color: colors.secondaryText }]}>
-                  {item.categoria}
-                </Text>
-                <Text style={[styles.historyDate, { color: colors.secondaryText }]}>
-                  {formatarDataCompra(item.compradoEm, language, textosDataCompra)}
-                </Text>
-                <Text style={[styles.historyPayment, { color: colors.secondaryText }]}>
-                  {t("profile.payment")}: {item.formaPagamento}
-                  {item.parcelas ? ` ${t("profile.installmentIn")} ${item.parcelas}x` : ""}
-                </Text>
-                <Text style={[styles.historyPrice, { color: colors.text }]}>{item.preco}</Text>
-              </View>
-            </View>
-          ))}
         <AccessibleButton
           accessibilityHint={t("profile.logoutHint")}
           onPress={logout}
@@ -718,6 +456,35 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 34,
   },
+  accountMenu: {
+    borderRadius: 28,
+    borderWidth: 1,
+    elevation: 5,
+    gap: 14,
+    marginTop: 16,
+    padding: 16,
+    shadowOffset: { height: 12, width: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+  },
+  accountMenuHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  accountSection: {
+    alignItems: "center",
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 92,
+    padding: 12,
+  },
+  accountSectionList: {
+    gap: 10,
+  },
   dataCard: {
     alignItems: "center",
     borderRadius: 26,
@@ -769,20 +536,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textTransform: "uppercase",
   },
-  emptyHistory: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 18,
-  },
-  emptyText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
   error: {
     borderRadius: 14,
     fontSize: 15,
@@ -796,94 +549,17 @@ const styles = StyleSheet.create({
     height: 84,
     width: 84,
   },
-  historyActionButton: {
-    width: "100%",
-  },
-  historyActions: {
-    gap: 10,
-    marginTop: 2,
-  },
-  historyCategory: {
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 3,
-  },
-  historyCount: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  historyDate: {
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
-    marginTop: 6,
-  },
-  historyHeader: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    marginTop: 26,
-  },
-  historyInfo: {
-    flex: 1,
-  },
-  historyName: {
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  historyNameLink: {
-    alignSelf: "flex-start",
-    borderBottomWidth: 1,
-    paddingBottom: 2,
-  },
-  historyPayment: {
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  historyPrice: {
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 6,
-  },
-  imagem: {
-    borderRadius: 14,
-    height: 68,
-    resizeMode: "contain",
-    width: 68,
-  },
-  itemHistorico: {
-    alignItems: "center",
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
-    padding: 12,
-  },
   logoutButton: {
     marginTop: 22,
   },
-  pedidoCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 12,
-    marginBottom: 14,
-    padding: 14,
+  menuEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
-  pedidoHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  pedidoHeaderInfo: {
-    flex: 1,
-  },
-  pedidoTitle: {
-    fontSize: 17,
+  menuTitle: {
+    fontSize: 22,
     fontWeight: "900",
   },
   profileCard: {
@@ -932,11 +608,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
     marginBottom: 22,
-  },
-  subtituloHistorico: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: "900",
   },
   textoCamera: {
     color: "#FFFFFF",

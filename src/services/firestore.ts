@@ -111,7 +111,7 @@ type CriarPedidoParams = {
   endereco: string;
   formaPagamento: string;
   parcelas?: string;
-  produtos: Produto[];
+  produtos: (Produto & { quantidade?: number })[];
   total: number;
   usuario: UsuarioFirestore;
 };
@@ -541,13 +541,11 @@ export async function atualizarLoginUsuarioFirestore(usuario: FirebaseAuthUser) 
   return chamarFirestore(`usuarios/${usuario.localId}`, {
     body: {
       atualizadoEm: agora,
-      email: usuario.email,
-      uid: usuario.localId,
       ultimoLoginEm: agora,
     },
     idToken: usuario.idToken,
     method: "PATCH",
-    updateMask: ["atualizadoEm", "email", "uid", "ultimoLoginEm"],
+    updateMask: ["atualizadoEm", "ultimoLoginEm"],
   });
 }
 
@@ -632,7 +630,7 @@ function garantirUsuarioAutenticado(usuario: UsuarioFirestore) {
   };
 }
 
-function produtoParaPedido(produto: Produto): PedidoProduto {
+function produtoParaPedido(produto: Produto & { quantidade?: number }): PedidoProduto {
   return {
     categoria: produto.categoria,
     descricao: produto.descricao,
@@ -642,7 +640,7 @@ function produtoParaPedido(produto: Produto): PedidoProduto {
     preco: produto.preco,
     precoNumero: produto.precoNumero ?? precoParaNumero(produto.preco),
     produtoId: produto.id,
-    quantidade: 1,
+    quantidade: produto.quantidade ?? 1,
   };
 }
 
@@ -697,7 +695,7 @@ export async function criarPedidoFirestore({
 }: CriarPedidoParams) {
   const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
   const agora = new Date();
-  const pedidoId = `pedido_${Date.now()}`;
+  const pedidoId = `pedido_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   await chamarFirestore<FirestoreDocument>(
     `pedidos/${pedidoId}`,
