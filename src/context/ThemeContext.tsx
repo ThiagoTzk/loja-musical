@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useState } from "react";
+import { useColorScheme } from "react-native";
 
 type ThemeType = "light" | "dark";
 
@@ -85,7 +86,12 @@ const lightColors: ThemeColors = {
 };
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeType>("dark");
+  // Inicia seguindo o tema do sistema operacional; o usuario ainda pode
+  // alternar manualmente pelo toggle.
+  const systemScheme = useColorScheme();
+  const [theme, setTheme] = useState<ThemeType>(
+    systemScheme === "light" ? "light" : "dark"
+  );
 
   function toggleTheme() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));

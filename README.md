@@ -1,551 +1,219 @@
-# BlackTone Music
+# 🎸 BlackTone Music
 
-BlackTone Music é um aplicativo de e-commerce musical desenvolvido com Expo, React Native e Firebase. O projeto simula uma loja real para venda de instrumentos, vinis e produtos musicais, com fluxo de autenticação, catálogo vindo do banco de dados, carrinho, checkout, histórico de compras, dados de perfil e integração com API externa para preenchimento de endereço por CEP.
+> Storefront mobile de um e-commerce musical — Expo + React Native + Firebase.
+> Mobile storefront of a music e-commerce — Expo + React Native + Firebase.
 
-O projeto foi iniciado como um trabalho de faculdade ministrado pelo professor CARLOS ALBERTO CORREIA LESSA FILHO e depois evoluído como estudo de um aplicativo de e-commerce mais completo.
-
-O app foi pensado seguindo práticas comuns em projetos reais de e-commerce: separação entre interface e serviços, uso de variáveis de ambiente, dados persistidos no Firebase, regras de segurança no Firestore, tratamento de erros, acessibilidade básica, tema claro/escuro e suporte a dois idiomas.
-
-## Desenvolvedor
-
-- Thiago José Camêlo Nunes
-
-## Principais funcionalidades
-
-- Autenticação com email e senha usando Firebase Authentication.
-- Cadastro e login integrados ao back-end.
-- Catálogo de produtos carregado do Cloud Firestore.
-- Busca de produtos por nome, categoria, descrição e preço.
-- Carrinho de compras.
-- Checkout com validação de CPF, endereço e forma de pagamento.
-- Simulação de pagamento com cartão, Pix e débito.
-- Criação de pedidos no Firestore.
-- Histórico de compras no perfil do usuário.
-- CRUD de pedidos: listar, atualizar status e excluir histórico.
-- Dados pessoais do usuário salvos no Firestore.
-- Endereço padrão com preenchimento automático pelo CEP.
-- Cartão padrão salvo de forma simplificada, sem armazenar número completo nem CVV.
-- Painel administrativo para gerenciar produtos, pedidos e usuários.
-- Foto de perfil usando câmera do dispositivo.
-- Tema claro e escuro.
-- Tradução da interface para português e inglês.
-- Cuidados básicos de acessibilidade baseados em WCAG, como contraste, labels, hints e área segura.
-- Publicação de atualizações com EAS Update.
-
-## Tecnologias utilizadas
-
-- Expo
-- React Native
-- React
-- TypeScript
-- Expo Router
-- React Context API
-- Expo Camera
-- Expo Updates / EAS Update
-- React Native Safe Area Context
-- ESLint
-
-## APIs e serviços externos
-
-Esta seção reúne as integrações que conectam o aplicativo a serviços fora do código local.
-
-- Firebase Authentication: criação de conta e login com email e senha.
-- Cloud Firestore: banco de dados usado para produtos, usuários e pedidos.
-- Firebase REST API: comunicação HTTP com os serviços do Firebase.
-- ViaCEP API: busca automática de endereço a partir do CEP.
-
-### Firebase Authentication
-
-Usado para criar contas e autenticar usuários com email e senha. O app utiliza a API REST do Firebase Authentication para cadastrar e entrar na conta.
-
-Arquivo principal:
-
-```text
-src/config/firebase-config.ts
-```
-
-Funções principais:
-
-```text
-cadastrarUsuarioFirebase
-entrarUsuarioFirebase
-```
-
-### Cloud Firestore
-
-Usado como banco de dados do aplicativo. O Firestore armazena produtos, usuários e pedidos.
-
-Arquivo principal:
-
-```text
-src/services/firestore.ts
-```
-
-Coleções usadas:
-
-```text
-produtos
-usuarios
-pedidos
-```
-
-Exemplos de dados salvos:
-
-- Produtos: nome, categoria, descrição, preço, imagemLocal, imagemUrl, ativo e ordem.
-- Usuários: email, uid, nome, CPF, telefone, enderecoPadrao, cartaoPadrao e perfilCompleto.
-- Pedidos: usuarioId, itens, total, formaPagamento, endereço, CPF, status e datas.
-
-### ViaCEP API
-
-Usada para buscar endereço automaticamente ao digitar o CEP. Quando o usuário informa um CEP com 8 dígitos, o app consulta a API ViaCEP e preenche rua, bairro, cidade e UF.
-
-Arquivo principal:
-
-```text
-src/services/cep.ts
-```
-
-Endpoint usado:
-
-```text
-https://viacep.com.br/ws/{cep}/json/
-```
-
-Fluxo simplificado:
-
-1. O usuário digita o CEP.
-2. O app remove caracteres que não são números.
-3. Quando existem 8 dígitos, o app chama a API ViaCEP.
-4. A resposta JSON é convertida para o formato usado pelo app.
-5. A tela atualiza os campos de endereço automaticamente.
-
-## Estrutura do projeto
-
-```text
-app/
-  (tabs)/
-    index.tsx        Tela inicial e catálogo
-    busca.tsx        Busca de produtos
-    carrinho.tsx     Carrinho de compras
-    perfil.tsx       Perfil, histórico e pedidos
-  cadastro.tsx       Criação de conta
-  login.tsx          Login
-  pagamento.tsx      Checkout e criação de pedidos
-  admin.tsx          Painel administrativo
-  dados-conta.tsx    Dados pessoais, endereço e cartão padrão
-  produto/[id].tsx   Detalhes do produto
-
-components/
-  accessible-button.tsx
-  brand-logo.tsx
-  focusable-pressable.tsx
-  language-toggle.tsx
-
-src/
-  config/
-    firebase-config.ts
-  context/
-    CarrinhoContext.tsx
-    LanguageContext.tsx
-    ProdutosContext.tsx
-    ThemeContext.tsx
-    UsuarioContext.tsx
-  data/
-    produto.ts
-  services/
-    cep.ts
-    firestore.ts
-  utils/
-    firebase-auth-errors.ts
-    preco.ts
-```
-
-## Decisões inspiradas em aplicativos reais
-
-- O app separa telas, contextos e serviços para manter o código organizado.
-- O Firebase fica isolado em arquivos de configuração e serviço.
-- As credenciais ficam em `.env` com prefixo `EXPO_PUBLIC_`, como recomendado em projetos Expo.
-- Produtos não ficam fixos apenas na interface; eles podem vir do Firestore.
-- Pedidos são persistidos no banco, permitindo histórico e gerenciamento.
-- Dados sensíveis de cartão não são salvos por completo.
-- O checkout separa dados pessoais, endereço e pagamento, como em e-commerces reais.
-- O app possui tratamento de erro para login, cadastro, Firestore e CEP.
-- A interface respeita área segura em iOS e Android.
-- Acessibilidade foi considerada com contraste, labels, hints e botões com área de toque adequada.
-- O app tem suporte a internacionalização, com textos em português e inglês.
-
-## Configuração do ambiente
-
-Crie um arquivo `.env` na raiz do projeto com as variáveis do Firebase. O Expo precisa que variáveis públicas comecem com `EXPO_PUBLIC_`.
-
-Exemplo:
-
-```env
-EXPO_PUBLIC_FIREBASE_API_KEY=sua_api_key
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=seu_auth_domain
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=seu_project_id
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=seu_storage_bucket
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=seu_messaging_sender_id
-EXPO_PUBLIC_FIREBASE_APP_ID=seu_app_id
-EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=seu_measurement_id
-```
-
-O arquivo `.env` não deve ser enviado para o GitHub.
-
-## Como rodar o projeto
-
-Instale as dependências:
-
-```bash
-npm install
-```
-
-Inicie o Expo:
-
-```bash
-npx expo start
-```
-
-Rodar no Android:
-
-```bash
-npm run android
-```
-
-Rodar no iOS:
-
-```bash
-npm run ios
-```
-
-Rodar no navegador:
-
-```bash
-npm run web
-```
-
-## Como testar o fluxo principal
-
-1. Criar uma conta em Cadastro.
-2. Verificar se o usuário aparece no Firebase Authentication.
-3. Entrar com a conta criada.
-4. Verificar se o documento do usuário aparece na coleção `usuarios`.
-5. Abrir Produtos e conferir os itens carregados do Firestore.
-6. Adicionar um produto ao carrinho.
-7. Abrir o checkout.
-8. Completar CPF, endereço e forma de pagamento.
-9. Usar um cartão de teste válido, como `4242 4242 4242 4242`, CVV `123` e validade futura.
-10. Finalizar o pedido.
-11. Conferir se o pedido foi salvo na coleção `pedidos`.
-12. Abrir Perfil e verificar o histórico de compras.
-
-## EAS Update
-
-O projeto está configurado para receber atualizações via EAS Update.
-
-Comando usado para publicar uma atualização:
-
-```bash
-npx eas-cli@latest update --channel production --message "Entrega final com Firebase"
-```
-
-## Qualidade e validação
-
-Comando para verificar TypeScript:
-
-```bash
-npx tsc --noEmit
-```
-
-Comando para rodar o lint:
-
-```bash
-npm run lint
-```
-
-## Próximos passos
-
-- Evoluir o painel administrativo com promoções, estoque e permissões por função.
-- Integrar Firebase Storage para imagens dos produtos.
-- Aprimorar permissões de administrador no Firestore com papéis mais detalhados.
-- Adicionar controle de estoque.
-- Adicionar cupom de desconto.
-- Melhorar persistência local da sessão do usuário.
-- Criar status mais completos para pedidos, como pago, enviado, entregue e cancelado.
+**🇧🇷 [Português](#-português) · 🇬🇧 [English](#-english)**
+Projeto irmão / companion app: **[BlackTone Admin](https://github.com/ThiagoTzk/blacktone-admin)** (backoffice + API).
 
 ---
 
-# BlackTone Music - English Version
+## 🇧🇷 Português
 
-BlackTone Music is a music e-commerce app built with Expo, React Native and Firebase. The project simulates a real store for musical instruments, vinyl records and music products, including authentication, a database-driven catalog, cart, checkout, purchase history, user profile data and an external API integration for automatic address lookup by ZIP code.
+### Sobre o projeto
+BlackTone Music é o aplicativo **da loja** (storefront) de um e-commerce musical: instrumentos, vinis e produtos musicais. Inclui autenticação, catálogo vindo do Firestore, busca, carrinho, checkout, histórico de compras, perfil, endereço por CEP, tema claro/escuro e dois idiomas.
 
-The project started as a college assignment taught by professor CARLOS ALBERTO CORREIA LESSA FILHO and was later expanded as a study of a more complete e-commerce app.
+Começou como trabalho de faculdade (prof. **Carlos Alberto Correia Lessa Filho**) e evoluiu para um estudo de e-commerce mais completo. Faz par com o **BlackTone Admin**, o backoffice web que administra o mesmo Firebase.
 
-The app was designed using common practices from real e-commerce projects: separation between UI and services, environment variables, data persisted in Firebase, Firestore security rules, error handling, basic accessibility, light/dark theme and bilingual support.
+### O ecossistema BlackTone
+Dois apps que compartilham o **mesmo projeto Firebase**:
+- **BlackTone Music** (este repo) — o app do cliente (Android, iOS e web via Expo).
+- **BlackTone Admin** — o painel + API (Next.js) que administra catálogo, pedidos e usuários.
 
-## Developer
-
-- Thiago José Camêlo Nunes
-
-## Main features
-
-- Email and password authentication with Firebase Authentication.
-- Sign up and login integrated with the back-end.
-- Product catalog loaded from Cloud Firestore.
-- Product search by name, category, description and price.
-- Shopping cart.
-- Checkout with CPF, address and payment validation.
-- Simulated payment with card, Pix and debit.
-- Order creation in Firestore.
-- Purchase history in the user profile.
-- Order CRUD: list, update status and delete history.
-- User personal data saved in Firestore.
-- Default address with automatic ZIP code lookup.
-- Simplified default card storage without saving the full card number or CVV.
-- Admin panel to manage products, orders and users.
-- Profile photo using the device camera.
-- Light and dark theme.
-- Interface translation between Portuguese and English.
-- Basic accessibility practices inspired by WCAG, including contrast, labels, hints and safe area support.
-- Updates published with EAS Update.
-
-## Technologies
-
-- Expo
-- React Native
-- React
-- TypeScript
-- Expo Router
-- React Context API
-- Expo Camera
-- Expo Updates / EAS Update
-- React Native Safe Area Context
-- ESLint
-
-## External APIs and services
-
-This section lists the integrations that connect the app to services outside the local codebase.
-
-- Firebase Authentication: account creation and email/password login.
-- Cloud Firestore: database used for products, users and orders.
-- Firebase REST API: HTTP communication with Firebase services.
-- ViaCEP API: automatic address lookup from a ZIP code.
-
-### Firebase Authentication
-
-Used to create accounts and authenticate users with email and password. The app uses the Firebase Authentication REST API for sign up and login.
-
-Main file:
-
-```text
-src/config/firebase-config.ts
+```mermaid
+flowchart LR
+  M["BlackTone Music (cliente)"] -->|"cria pedido: POST /api/orders"| A["BlackTone Admin (API)"]
+  A -->|"Admin SDK"| F[("Firebase / Firestore")]
+  M -->|"login + leitura do catálogo"| F
 ```
 
-Main functions:
+> 🔒 O pedido **não** é gravado direto pelo app: ele envia apenas os itens (produto + quantidade) e o servidor do Admin **recalcula o total** a partir dos preços reais. Isso impede que o cliente forje o valor.
 
-```text
-cadastrarUsuarioFirebase
-entrarUsuarioFirebase
-```
+### Funcionalidades
+- Cadastro e login com email/senha (Firebase Auth via REST).
+- Catálogo carregado do Cloud Firestore.
+- Busca por nome, categoria, descrição e preço.
+- Carrinho e checkout (CPF, endereço, forma de pagamento).
+- Pagamento simulado (cartão, Pix, débito).
+- Criação de pedido com **total recalculado no servidor**.
+- Histórico de compras no perfil.
+- Endereço padrão com preenchimento automático por CEP (ViaCEP).
+- Cartão padrão simplificado (sem número completo nem CVV).
+- Foto de perfil pela câmera do dispositivo.
+- Tema claro/escuro que segue o sistema (a status bar acompanha).
+- Interface em português e inglês.
+- Cuidados de acessibilidade (WCAG AA): contraste, labels, hints e área segura.
+- Atualizações publicadas via EAS Update.
 
-### Cloud Firestore
+### Stack
+Expo · React Native · React · TypeScript · Expo Router · Context API · Expo Camera · Expo Status Bar · EAS Update · ESLint
 
-Used as the app database. Firestore stores products, users and orders.
+### Serviços externos
+| Serviço | Uso | Arquivo |
+|---|---|---|
+| Firebase Authentication (REST) | cadastro e login | `src/config/firebase-config.ts` |
+| Cloud Firestore (REST) | catálogo, perfil e leitura de pedidos | `src/services/firestore.ts` |
+| BlackTone Admin API | criação de pedidos (`POST /api/orders`) | `src/services/firestore.ts` |
+| ViaCEP | endereço a partir do CEP | `src/services/cep.ts` |
 
-Main file:
-
-```text
-src/services/firestore.ts
-```
-
-Collections:
-
-```text
-produtos
-usuarios
-pedidos
-```
-
-Examples of stored data:
-
-- Products: name, category, description, price, local image id, image URL, active status and display order.
-- Users: email, uid, name, CPF, phone, default address, default card and profile completion status.
-- Orders: userId, items, total, payment method, address, CPF, status and timestamps.
-
-### ViaCEP API
-
-Used to automatically fetch address data from a ZIP code. When the user enters an 8-digit CEP, the app calls ViaCEP and fills street, neighborhood, city and state.
-
-Main file:
-
-```text
-src/services/cep.ts
-```
-
-Endpoint:
-
-```text
-https://viacep.com.br/ws/{cep}/json/
-```
-
-Simplified flow:
-
-1. The user types the ZIP code.
-2. The app removes non-numeric characters.
-3. When there are 8 digits, the app calls the ViaCEP API.
-4. The JSON response is mapped to the app address format.
-5. The screen automatically updates the address fields.
-
-## Project structure
-
+### Estrutura
 ```text
 app/
-  (tabs)/
-    index.tsx        Home screen and catalog
-    busca.tsx        Product search
-    carrinho.tsx     Shopping cart
-    perfil.tsx       Profile, history and orders
-  cadastro.tsx       Account creation
-  login.tsx          Login
-  pagamento.tsx      Checkout and order creation
-  admin.tsx          Admin panel
-  dados-conta.tsx    Personal data, address and default card
-  produto/[id].tsx   Product details
-
-components/
-  accessible-button.tsx
-  brand-logo.tsx
-  focusable-pressable.tsx
-  language-toggle.tsx
-
+  (tabs)/  index · busca · carrinho · perfil
+  login · cadastro · pagamento · dados-conta · historico
+  produto/[id]
+components/  botões acessíveis, logo, toggle de idioma
 src/
-  config/
-    firebase-config.ts
-  context/
-    CarrinhoContext.tsx
-    LanguageContext.tsx
-    ProdutosContext.tsx
-    ThemeContext.tsx
-    UsuarioContext.tsx
-  data/
-    produto.ts
-  services/
-    cep.ts
-    firestore.ts
-  utils/
-    firebase-auth-errors.ts
-    preco.ts
+  config/   firebase-config
+  context/  Carrinho · Language · Produtos · Theme · Usuario
+  data/     produto
+  services/ cep · firestore
+  utils/    preco · firebase-auth-errors
+firestore.rules
 ```
 
-## Decisions inspired by real apps
+### Configuração e execução
+1. Crie um `.env` na raiz (variáveis públicas usam o prefixo `EXPO_PUBLIC_`):
+   ```env
+   EXPO_PUBLIC_FIREBASE_API_KEY=...
+   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+   EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
+   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+   EXPO_PUBLIC_FIREBASE_APP_ID=...
+   EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=...
+   # URL do BlackTone Admin (cria os pedidos com total no servidor)
+   EXPO_PUBLIC_ADMIN_API_URL=https://seu-admin.vercel.app
+   ```
+2. Instale e rode:
+   ```bash
+   npm install
+   npx expo start   # depois pressione: a (Android) · i (iOS) · w (web)
+   ```
+> O `.env` **não** deve ir para o GitHub.
 
-- Screens, contexts and services are separated to keep the code organized.
-- Firebase logic is isolated in configuration and service files.
-- Credentials are stored in `.env` with the `EXPO_PUBLIC_` prefix, as expected in Expo projects.
-- Products are not only hardcoded in the UI; they can be loaded from Firestore.
-- Orders are persisted in the database, enabling history and management.
-- Sensitive card data is not fully stored.
-- Checkout separates personal data, delivery and payment, similar to real e-commerce apps.
-- The app handles errors for login, sign up, Firestore and ZIP code lookup.
-- The interface respects safe areas on iOS and Android.
-- Accessibility is considered through contrast, labels, hints and touch target size.
-- The app supports internationalization with Portuguese and English texts.
+### Scripts
+| Comando | O que faz |
+|---|---|
+| `npx expo start` | inicia o app |
+| `npm run android` / `ios` / `web` | abre na plataforma |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
 
-## Environment setup
+### Segurança (Firestore)
+As regras ficam em `firestore.rules` (neste repo):
+- **produtos** — leitura pública, escrita só admin.
+- **pedidos** — cada usuário lê os próprios; **criação bloqueada no cliente** (feita pelo servidor); atualizar/excluir só admin.
+- **usuarios** — cada um lê/edita campos seguros do próprio perfil; admin lista e altera permissões.
 
-Create a `.env` file in the project root with your Firebase variables. Expo public variables must use the `EXPO_PUBLIC_` prefix.
+### Roadmap
+Controle de estoque · cupons de desconto · persistência local da sessão · Firebase Storage para imagens · status de pedido mais completos.
 
-Example:
+### Desenvolvedor
+**Thiago José Camêlo Nunes**
 
-```env
-EXPO_PUBLIC_FIREBASE_API_KEY=your_api_key
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
-EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+---
+
+## 🇬🇧 English
+
+### About
+BlackTone Music is the **storefront** app of a music e-commerce: instruments, vinyl records and music products. It includes authentication, a Firestore-driven catalog, search, cart, checkout, purchase history, profile, ZIP-code address lookup, light/dark theme and two languages.
+
+It started as a college assignment (prof. **Carlos Alberto Correia Lessa Filho**) and grew into a more complete e-commerce study. It pairs with **BlackTone Admin**, the web backoffice that manages the same Firebase project.
+
+### The BlackTone ecosystem
+Two apps sharing the **same Firebase project**:
+- **BlackTone Music** (this repo) — the customer app (Android, iOS and web via Expo).
+- **BlackTone Admin** — the panel + API (Next.js) that manages catalog, orders and users.
+
+```mermaid
+flowchart LR
+  M["BlackTone Music (client)"] -->|"create order: POST /api/orders"| A["BlackTone Admin (API)"]
+  A -->|"Admin SDK"| F[("Firebase / Firestore")]
+  M -->|"login + catalog read"| F
 ```
 
-The `.env` file should not be committed to GitHub.
+> 🔒 The order is **not** written directly by the app: it only sends the items (product + quantity) and the Admin server **recomputes the total** from the real prices, so the client can't forge the amount.
 
-## How to run
+### Features
+- Email/password sign up and login (Firebase Auth via REST).
+- Catalog loaded from Cloud Firestore.
+- Search by name, category, description and price.
+- Cart and checkout (CPF, address, payment method).
+- Simulated payment (card, Pix, debit).
+- Order creation with a **server-recomputed total**.
+- Purchase history in the profile.
+- Default address with automatic ZIP-code lookup (ViaCEP).
+- Simplified default card (no full number or CVV stored).
+- Profile photo via the device camera.
+- Light/dark theme that follows the OS (status bar included).
+- Portuguese and English UI.
+- Accessibility care (WCAG AA): contrast, labels, hints and safe area.
+- Updates shipped via EAS Update.
 
-Install dependencies:
+### Stack
+Expo · React Native · React · TypeScript · Expo Router · Context API · Expo Camera · Expo Status Bar · EAS Update · ESLint
 
-```bash
-npm install
+### External services
+| Service | Use | File |
+|---|---|---|
+| Firebase Authentication (REST) | sign up and login | `src/config/firebase-config.ts` |
+| Cloud Firestore (REST) | catalog, profile and order reads | `src/services/firestore.ts` |
+| BlackTone Admin API | order creation (`POST /api/orders`) | `src/services/firestore.ts` |
+| ViaCEP | address from ZIP code | `src/services/cep.ts` |
+
+### Project structure
+```text
+app/
+  (tabs)/  index · busca · carrinho · perfil
+  login · cadastro · pagamento · dados-conta · historico
+  produto/[id]
+components/  accessible buttons, logo, language toggle
+src/
+  config/   firebase-config
+  context/  Carrinho · Language · Produtos · Theme · Usuario
+  data/     produto
+  services/ cep · firestore
+  utils/    preco · firebase-auth-errors
+firestore.rules
 ```
 
-Start Expo:
+### Setup & run
+1. Create a `.env` at the root (public vars use the `EXPO_PUBLIC_` prefix):
+   ```env
+   EXPO_PUBLIC_FIREBASE_API_KEY=...
+   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+   EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
+   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+   EXPO_PUBLIC_FIREBASE_APP_ID=...
+   EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=...
+   # BlackTone Admin URL (creates orders with the server-side total)
+   EXPO_PUBLIC_ADMIN_API_URL=https://your-admin.vercel.app
+   ```
+2. Install and run:
+   ```bash
+   npm install
+   npx expo start   # then press: a (Android) · i (iOS) · w (web)
+   ```
+> The `.env` file must **not** be committed.
 
-```bash
-npx expo start
-```
+### Scripts
+| Command | What it does |
+|---|---|
+| `npx expo start` | start the app |
+| `npm run android` / `ios` / `web` | open on platform |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
 
-Run on Android:
+### Security (Firestore)
+Rules live in `firestore.rules` (this repo):
+- **produtos** — public read, admin-only writes.
+- **pedidos** — each user reads their own; **client creation blocked** (done by the server); update/delete admin-only.
+- **usuarios** — each user reads/edits safe fields of their own profile; admin lists and changes permissions.
 
-```bash
-npm run android
-```
+### Roadmap
+Stock control · discount coupons · local session persistence · Firebase Storage for images · richer order statuses.
 
-Run on iOS:
-
-```bash
-npm run ios
-```
-
-Run on web:
-
-```bash
-npm run web
-```
-
-## How to test the main flow
-
-1. Create an account on the sign-up screen.
-2. Check if the user appears in Firebase Authentication.
-3. Login with the created account.
-4. Check if the user document appears in the `usuarios` collection.
-5. Open Products and confirm that items are loaded from Firestore.
-6. Add a product to the cart.
-7. Open checkout.
-8. Complete CPF, address and payment method.
-9. Use a valid test card, such as `4242 4242 4242 4242`, CVV `123` and a future expiration date.
-10. Finish the order.
-11. Check if the order was saved in the `pedidos` collection.
-12. Open Profile and verify the purchase history.
-
-## EAS Update
-
-The project is configured to receive updates through EAS Update.
-
-Command used to publish an update:
-
-```bash
-npx eas-cli@latest update --channel production --message "Entrega final com Firebase"
-```
-
-## Quality checks
-
-TypeScript check:
-
-```bash
-npx tsc --noEmit
-```
-
-Lint:
-
-```bash
-npm run lint
-```
-
-## Next steps
-
-- Evolve the admin panel with promotions, stock control and role-based permissions.
-- Integrate Firebase Storage for product images.
-- Improve Firestore administrator permissions with more detailed roles.
-- Add stock control.
-- Add discount coupons.
-- Improve local session persistence.
-- Create more complete order statuses, such as paid, shipped, delivered and canceled.
+### Developer
+**Thiago José Camêlo Nunes**

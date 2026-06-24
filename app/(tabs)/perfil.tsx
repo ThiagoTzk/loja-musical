@@ -11,7 +11,6 @@ import { useContext, useRef, useState } from "react";
 import {
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -286,57 +285,6 @@ export default function Perfil() {
           </View>
         </View>
 
-        {usuario.admin && Platform.OS === "web" && (
-          <FocusablePressable
-            accessibilityHint={
-              language === "en"
-                ? "Opens the web administrative panel."
-                : "Abre o painel administrativo web."
-            }
-            accessibilityLabel="Admin Web BlackTone"
-            accessibilityRole="button"
-            hitSlop={6}
-            onPress={() => router.push("/admin-web" as never)}
-            style={({ pressed }) => [
-              styles.dataCard,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                opacity: pressed ? 0.84 : 1,
-                shadowColor: colors.shadow,
-              },
-            ]}
-          >
-            <View style={[styles.dataIcon, { backgroundColor: colors.accent }]}>
-              <Ionicons
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                name="shield-checkmark"
-                size={28}
-                color={colors.accentText}
-              />
-            </View>
-
-            <View style={styles.dataInfo}>
-              <Text style={[styles.dataTitle, { color: colors.text }]}>
-                Admin Web BlackTone
-              </Text>
-              <Text style={[styles.dataDescription, { color: colors.secondaryText }]}>
-                {language === "en"
-                  ? "Open the browser backoffice."
-                  : "Abra o backoffice no navegador."}
-              </Text>
-            </View>
-
-            <Ionicons
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-              name="chevron-forward"
-              size={22}
-              color={colors.secondaryText}
-            />
-          </FocusablePressable>
-        )}
         <AccessibleButton
           accessibilityHint={t("profile.logoutHint")}
           onPress={logout}

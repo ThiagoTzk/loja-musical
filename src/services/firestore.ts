@@ -8,7 +8,7 @@ import {
   Produto,
   resolverImagemProduto,
 } from "@/src/data/produto";
-import { formatarMoeda, precoParaNumero } from "@/src/utils/preco";
+import { formatarMoeda } from "@/src/utils/preco";
 
 type FirestoreValue = {
   stringValue?: string;
@@ -81,29 +81,6 @@ export type ProdutoAdmin = Produto & {
   estoque?: number;
   ordem: number;
   parcelasMaximas?: number;
-};
-
-export type ProdutoAdminInput = {
-  ativo: boolean;
-  categoria: string;
-  descricao: string;
-  estoque?: number;
-  id: string;
-  imagemLocal: string;
-  imagemUrl?: string;
-  nome: string;
-  ordem: number;
-  parcelasMaximas?: number;
-  preco: number;
-  precoTexto: string;
-};
-
-export type UsuarioAdmin = DadosPerfilUsuario & {
-  atualizadoEm: string;
-  criadoEm: string;
-  email: string;
-  uid: string;
-  ultimoLoginEm: string;
 };
 
 type CriarPedidoParams = {
@@ -401,19 +378,6 @@ function dadosPerfilDoDocumento(documento: FirestoreDocument): DadosPerfilUsuari
   };
 }
 
-function usuarioAdminDoDocumento(documento: FirestoreDocument): UsuarioAdmin {
-  const fields = documento.fields;
-
-  return {
-    ...dadosPerfilDoDocumento(documento),
-    atualizadoEm: timestampField(fields, "atualizadoEm") ?? "",
-    criadoEm: timestampField(fields, "criadoEm") ?? "",
-    email: stringField(fields, "email") ?? "",
-    uid: stringField(fields, "uid") ?? documentId(documento),
-    ultimoLoginEm: timestampField(fields, "ultimoLoginEm") ?? "",
-  };
-}
-
 function produtoDoDocumento(
   documento: FirestoreDocument
 ): ProdutoAdmin {
@@ -453,61 +417,6 @@ export async function listarProdutosFirestore() {
     .map(({ ativo: _ativo, ordem: _ordem, ...produto }) => produto);
 
   return produtos;
-}
-
-export async function listarProdutosAdminFirestore(usuario: UsuarioFirestore) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-  const dados = await chamarFirestore<FirestoreListResponse>("produtos", {
-    idToken: usuarioAutenticado.idToken,
-    method: "GET",
-  });
-
-  return (dados.documents ?? [])
-    .map(produtoDoDocumento)
-    .sort((a, b) => a.ordem - b.ordem);
-}
-
-export async function salvarProdutoAdminFirestore(
-  usuario: UsuarioFirestore,
-  produto: ProdutoAdminInput
-) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-
-  return chamarFirestore<FirestoreDocument>(
-    `produtos/${produto.id}`,
-    {
-      body: {
-        ativo: produto.ativo,
-        categoria: produto.categoria,
-        descricao: produto.descricao,
-        estoque: produto.estoque ?? 0,
-        imagemLocal: produto.imagemLocal,
-        imagemUrl: produto.imagemUrl ?? "",
-        nome: produto.nome,
-        ordem: produto.ordem,
-        parcelasMaximas: produto.parcelasMaximas ?? 10,
-        preco: produto.preco,
-        precoTexto: produto.precoTexto,
-      },
-      idToken: usuarioAutenticado.idToken,
-      method: "PATCH",
-    }
-  );
-}
-
-export async function excluirProdutoAdminFirestore(
-  usuario: UsuarioFirestore,
-  produtoId: string
-) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-
-  return chamarFirestore<Record<string, never>>(
-    `produtos/${produtoId}`,
-    {
-      idToken: usuarioAutenticado.idToken,
-      method: "DELETE",
-    }
-  );
 }
 
 export async function salvarUsuarioFirestore(usuario: FirebaseAuthUser) {
@@ -630,20 +539,6 @@ function garantirUsuarioAutenticado(usuario: UsuarioFirestore) {
   };
 }
 
-function produtoParaPedido(produto: Produto & { quantidade?: number }): PedidoProduto {
-  return {
-    categoria: produto.categoria,
-    descricao: produto.descricao,
-    imagemLocal: produto.imagemLocal ?? produto.id,
-    imagemUrl: produto.imagemUrl ?? "",
-    nome: produto.nome,
-    preco: produto.preco,
-    precoNumero: produto.precoNumero ?? precoParaNumero(produto.preco),
-    produtoId: produto.id,
-    quantidade: produto.quantidade ?? 1,
-  };
-}
-
 function produtoPedidoDoValor(valor: FirestoreValue): PedidoProduto {
   const fields = mapFields(valor);
   const produtoId = stringField(fields, "produtoId") ?? "";
@@ -690,37 +585,49 @@ export async function criarPedidoFirestore({
   formaPagamento,
   parcelas,
   produtos,
-  total,
   usuario,
 }: CriarPedidoParams) {
   const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-  const agora = new Date();
-  const pedidoId = `pedido_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const baseUrl = process.env.EXPO_PUBLIC_ADMIN_API_URL?.replace(/\/$/, "");
 
-  await chamarFirestore<FirestoreDocument>(
-    `pedidos/${pedidoId}`,
-    {
-      body: {
-        atualizadoEm: agora,
-        cpf,
-        criadoEm: agora,
-        endereco,
-        formaPagamento,
-        id: pedidoId,
-        itens: produtos.map(produtoParaPedido),
-        parcelas: parcelas ?? "",
-        status: "realizado",
-        total,
-        totalTexto: formatarMoeda(total),
-        usuarioEmail: usuarioAutenticado.email,
-        usuarioId: usuarioAutenticado.uid,
-      },
-      idToken: usuarioAutenticado.idToken,
-      method: "PATCH",
-    }
-  );
+  if (!baseUrl) {
+    throw criarErroFirestore(
+      "pedido/sem-endpoint",
+      "EXPO_PUBLIC_ADMIN_API_URL nao configurado no .env."
+    );
+  }
 
-  return pedidoId;
+  // O pedido e criado pelo servidor (admin), que recalcula o total a partir
+  // dos precos reais. O cliente envia apenas produtoId + quantidade.
+  const resposta = await fetch(`${baseUrl}/api/orders`, {
+    body: JSON.stringify({
+      cpf,
+      endereco,
+      formaPagamento,
+      itens: produtos.map((produto) => ({
+        produtoId: produto.id,
+        quantidade: produto.quantidade ?? 1,
+      })),
+      parcelas: parcelas ?? "",
+    }),
+    headers: {
+      Authorization: `Bearer ${usuarioAutenticado.idToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const texto = await resposta.text();
+  const dados = texto ? JSON.parse(texto) : {};
+
+  if (!resposta.ok) {
+    throw criarErroFirestore(
+      dados?.error?.code ?? "pedido/erro",
+      dados?.error?.message ?? "Nao foi possivel criar o pedido."
+    );
+  }
+
+  return (dados?.data?.id as string) ?? "";
 }
 
 export async function listarPedidosUsuarioFirestore(usuario: UsuarioFirestore) {
@@ -746,85 +653,4 @@ export async function listarPedidosUsuarioFirestore(usuario: UsuarioFirestore) {
     .filter((documento): documento is FirestoreDocument => Boolean(documento))
     .map(pedidoDoDocumento)
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
-}
-
-export async function listarPedidosAdminFirestore(usuario: UsuarioFirestore) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-  const dados = await chamarFirestore<FirestoreListResponse>("pedidos", {
-    idToken: usuarioAutenticado.idToken,
-    method: "GET",
-  });
-
-  return (dados.documents ?? [])
-    .map(pedidoDoDocumento)
-    .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
-}
-
-export async function listarUsuariosAdminFirestore(usuario: UsuarioFirestore) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-  const dados = await chamarFirestore<FirestoreListResponse>("usuarios", {
-    idToken: usuarioAutenticado.idToken,
-    method: "GET",
-  });
-
-  return (dados.documents ?? [])
-    .map(usuarioAdminDoDocumento)
-    .sort((a, b) => a.email.localeCompare(b.email));
-}
-
-export async function atualizarPermissaoAdminUsuarioFirestore(
-  usuario: UsuarioFirestore,
-  userId: string,
-  admin: boolean
-) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-
-  return chamarFirestore<FirestoreDocument>(
-    `usuarios/${userId}`,
-    {
-      body: {
-        admin,
-        atualizadoEm: new Date(),
-      },
-      idToken: usuarioAutenticado.idToken,
-      method: "PATCH",
-      updateMask: ["admin", "atualizadoEm"],
-    }
-  );
-}
-
-export async function atualizarStatusPedidoFirestore(
-  usuario: UsuarioFirestore,
-  pedidoId: string,
-  status: PedidoStatus
-) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-
-  return chamarFirestore<FirestoreDocument>(
-    `pedidos/${pedidoId}`,
-    {
-      body: {
-        atualizadoEm: new Date(),
-        status,
-      },
-      idToken: usuarioAutenticado.idToken,
-      method: "PATCH",
-      updateMask: ["atualizadoEm", "status"],
-    }
-  );
-}
-
-export async function excluirPedidoFirestore(
-  usuario: UsuarioFirestore,
-  pedidoId: string
-) {
-  const usuarioAutenticado = garantirUsuarioAutenticado(usuario);
-
-  return chamarFirestore<Record<string, never>>(
-    `pedidos/${pedidoId}`,
-    {
-      idToken: usuarioAutenticado.idToken,
-      method: "DELETE",
-    }
-  );
 }

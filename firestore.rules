@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function signedIn() {
       return request.auth != null;
     }
@@ -16,6 +17,13 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.admin == true;
     }
 
+    function isSafeUserCreate(userId) {
+      return isOwner(userId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.admin == false;
+    }
+
     function isSafeUserUpdate(userId) {
       return isOwner(userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -24,6 +32,7 @@ service cloud.firestore {
           "cpf",
           "dataNascimento",
           "enderecoPadrao",
+          "fotoURL",
           "nome",
           "perfilCompleto",
           "telefone",
@@ -34,31 +43,32 @@ service cloud.firestore {
         && request.resource.data.uid == resource.data.uid;
     }
 
-    function isSafeUserCreate(userId) {
-      return isOwner(userId)
-        && request.resource.data.admin == false
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.uid == request.auth.uid;
-    }
-
     match /produtos/{produtoId} {
       allow get, list: if true;
       allow create, update, delete: if isAdmin();
     }
 
     match /pedidos/{pedidoId} {
-      allow create: if signedIn()
-        && request.resource.data.usuarioId == request.auth.uid;
-      allow get, list: if isAdmin() || (signedIn() && resource.data.usuarioId == request.auth.uid);
+      // O pedido e criado pelo SERVIDOR (endpoint POST /api/orders do admin),
+      // que recalcula o total a partir dos precos reais e grava via Admin SDK
+      // (bypass das rules). Por isso o cliente nao cria pedido direto.
+      allow create: if false;
+
+      allow get, list: if isAdmin()
+        || (signedIn() && resource.data.usuarioId == request.auth.uid);
+
       allow update, delete: if isAdmin();
     }
 
     match /usuarios/{userId} {
       allow create: if isSafeUserCreate(userId);
+
       allow get: if isOwner(userId) || isAdmin();
+
       allow list: if isAdmin();
-      allow update: if isAdmin()
-        || isSafeUserUpdate(userId);
+
+      allow update: if isAdmin() || isSafeUserUpdate(userId);
+
       allow delete: if false;
     }
   }
